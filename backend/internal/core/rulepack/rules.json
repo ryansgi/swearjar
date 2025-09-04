@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "templates": [
+    { "pattern": "fuck you {TARGET_BOT}", "category": "tool", "severity": 3 },
+    { "pattern": "screw you {TARGET_TOOL}", "category": "tool", "severity": 2 }
+  ],
+  "slots": {
+    "TARGET_BOT": ["dependabot", "renovate", "mergify", "stryker"],
+    "TARGET_TOOL": ["lint", "linter", "prettier", "eslint", "ci", "build"]
+  },
+  "lemmas": [
+    { "term": "fuck", "category": "generic", "severity": 2 },
+    { "term": "shit", "category": "generic", "severity": 1 },
+    { "term": "bitch", "category": "generic", "severity": 2 }
+  ],
+  "stoplist": [
+    "assistant",
+    "assess",
+    "Scunthorpe",
+    "passage"
+  ]
+}

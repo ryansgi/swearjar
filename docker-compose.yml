@@ -1,0 +1,111 @@
+x-go-service: &go-service
+  env_file:
+    - ./.env
+  build:
+    context: .
+    dockerfile: backend/Dockerfile.dev
+    args:
+      UID: ${UID:-1000}
+      GID: ${GID:-1000}
+  working_dir: /app/backend
+  volumes:
+    - ./backend:/app/backend
+    - type: volume
+      source: gomodcache
+      target: /go/pkg/mod
+      volume:
+        nocopy: true
+    - type: volume
+      source: gocache
+      target: /root/.cache/go-build
+      volume:
+        nocopy: true
+  depends_on:
+    postgres:
+      condition: service_healthy
+    clickhouse:
+      condition: service_healthy
+
+services:
+  postgres:
+    container_name: ${SERVICE_PREFIX:-sw_}pgsql
+    image: postgres:18beta3
+    ports:
+      - "${POSTGRES_PORT:-5432}:${POSTGRES_PORT:-5432}"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-swearjar}
+      POSTGRES_USER: ${POSTGRES_USER:-swearjar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-swearjar}
+      PGPORT: ${POSTGRES_PORT:-5432}
+    volumes:
+      - "./backend/docker/pgsql/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro"
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-swearjar} -d ${POSTGRES_DB:-swearjar} -p ${POSTGRES_PORT:-5432}",
+        ]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    env_file:
+      - ./.env
+
+  clickhouse:
+    container_name: ${SERVICE_PREFIX:-sw_}clickhouse
+    image: clickhouse/clickhouse-server:latest
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - chdata:/var/lib/clickhouse
+    healthcheck:
+      test:
+        ["CMD-SHELL", "wget -qO- http://localhost:8123/ping | grep -q 'Ok.'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    env_file:
+      - ./.env
+  adminer:
+    env_file:
+      - ./.env
+    container_name: ${SERVICE_PREFIX:-sw_}adminer
+    build:
+      context: ./backend/docker/adminer
+      dockerfile: Dockerfile
+    ports:
+      - "${SERVICE_PORT_ADMINER:-5300}:8080"
+    depends_on:
+      - postgres
+    environment:
+      - ADMINER_DEFAULT_SERVER=pgsql
+  api:
+    <<: *go-service
+    container_name: ${SERVICE_PREFIX:-sw_}api
+    command: sh -c "air -c cmd/swearjar-api/.air.toml"
+    ports:
+      - "${CORE_API_PORT:-8080}:${CORE_API_PORT:-4000}"
+    volumes:
+      - ./backend:/app/backend
+      - type: volume
+        source: gomodcache
+        target: /go/pkg/mod
+        volume:
+          nocopy: true
+      - type: volume
+        source: gocache
+        target: /root/.cache/go-build
+        volume:
+          nocopy: true
+      - ./backend/data:/var/lib/swearjar/gharchive
+volumes:
+  pgdata:
+  chdata:
+  gomodcache:
+  gocache:

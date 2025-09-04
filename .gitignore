@@ -7,6 +7,7 @@
 *.dll
 *.so
 *.dylib
+*Zone.Identifier
 
 # Test binary, built with `go test -c`
 *.test
@@ -29,4 +30,13 @@ go.work.sum
 
 # Editor/IDE
 # .idea/
-# .vscode/
+.vscode/
+
+# Swearjar specific ignores
+backend/data/*.gz*
+backend/bin
+backend/tmp
+backend/internal/services/api/docs
+
+# temporary internal docs
+/_notes

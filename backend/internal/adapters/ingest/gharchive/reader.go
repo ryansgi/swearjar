@@ -1,0 +1,133 @@
+package gharchive
+
+import (
+	"bufio"
+	"compress/gzip"
+	"context"
+	"encoding/json/v2"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"time"
+)
+
+const (
+	baseURL          = "https://data.gharchive.org"
+	defaultHTTPTO    = 30 * time.Second
+	maxScanTokenSize = 32 * 1024 * 1024
+)
+
+// Fetcher fetches a reader for a given hour
+type Fetcher interface {
+	Fetch(ctx context.Context, hour HourRef) (io.ReadCloser, error)
+}
+
+// HTTPFetcher fetches directly from gharchive.org
+type HTTPFetcher struct {
+	Client *http.Client
+}
+
+// NewHTTPFetcher creates a new HTTPFetcher with default settings
+func NewHTTPFetcher() *HTTPFetcher {
+	return &HTTPFetcher{Client: &http.Client{Timeout: defaultHTTPTO}}
+}
+
+// Fetch returns a reader for the gzip file for the given hour
+func (f *HTTPFetcher) Fetch(ctx context.Context, hour HourRef) (io.ReadCloser, error) {
+	url := fmt.Sprintf("%s/%s.json.gz", baseURL, hour.String())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := f.Client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		closeErr := resp.Body.Close()
+		if closeErr != nil {
+			return nil, fmt.Errorf(
+				"gharchive: unexpected status %d for %s; error closing body: %v",
+				resp.StatusCode, url, closeErr,
+			)
+		}
+		return nil, fmt.Errorf("gharchive: unexpected status %d for %s", resp.StatusCode, url)
+	}
+	return resp.Body, nil
+}
+
+// Reader streams EventEnvelope items from a gzip file
+type Reader struct {
+	r      io.ReadCloser
+	gz     *gzip.Reader
+	sc     *bufio.Scanner
+	err    error
+	events int
+	bytes  int64
+}
+
+// NewReader creates a new Reader from the given ReadCloser
+func NewReader(r io.ReadCloser) (*Reader, error) {
+	gz, err := gzip.NewReader(r)
+	if err != nil {
+		if cerr := r.Close(); cerr != nil {
+			return nil, cerr
+		}
+		return nil, err
+	}
+	sc := bufio.NewScanner(gz)
+	buf := make([]byte, 512*1024)
+	sc.Buffer(buf, maxScanTokenSize)
+	return &Reader{r: r, gz: gz, sc: sc}, nil
+}
+
+// Next reads the next event; returns io.EOF when done
+func (rd *Reader) Next() (EventEnvelope, error) {
+	if rd.err != nil {
+		return EventEnvelope{}, rd.err
+	}
+	for {
+		if !rd.sc.Scan() {
+			if err := rd.sc.Err(); err != nil {
+				rd.err = err
+				return EventEnvelope{}, err
+			}
+			rd.err = io.EOF
+			return EventEnvelope{}, io.EOF
+		}
+		line := rd.sc.Bytes()
+		cp := make([]byte, len(line))
+		copy(cp, line)
+
+		var env EventEnvelope
+		if err := json.Unmarshal(cp, &env); err != nil {
+			// skip malformed lines
+			continue
+		}
+		rd.events++
+		rd.bytes += int64(len(cp) + 1) // include newline
+		return env, nil
+	}
+}
+
+// Close closes the underlying reader
+func (rd *Reader) Close() error {
+	var first error
+	if rd.gz != nil {
+		if err := rd.gz.Close(); err != nil && !errors.Is(err, io.ErrClosedPipe) {
+			first = err
+		}
+	}
+	if rd.r != nil {
+		if err := rd.r.Close(); err != nil && first == nil {
+			first = err
+		}
+	}
+	return first
+}
+
+// Stats returns the number of events parsed and total uncompressed bytes read so far
+func (rd *Reader) Stats() (events int, bytes int64) {
+	return rd.events, rd.bytes
+}

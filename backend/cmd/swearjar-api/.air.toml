@@ -1,0 +1,39 @@
+root = "/app/backend"
+tmp_dir = "bin"
+
+[build]
+cmd = """
+command -v swag >/dev/null 2>&1 || GOBIN=/go/bin go install github.com/swaggo/swag/cmd/swag@latest
+swag init \
+  --generalInfo ./cmd/swearjar-api/main.go \
+  --dir ./ \
+  --output ./internal/services/api/docs \
+  --parseDependency \
+  --parseInternal \
+  --parseDepth 3 \
+  --v3.1
+GOEXPERIMENT=jsonv2 go build -tags swag -o ./bin/api ./cmd/swearjar-api
+"""
+bin = "bin/api"
+
+# watch Go code + common config formats
+include_ext = ["go", "yaml", "yml", "toml"]
+
+include_dir = [
+  "cmd",          # main.go holds swagger generalInfo and can have annotations
+  "internal",     # main application
+]
+
+# ignore generated or vendor paths
+exclude_dir = ["internal/services/api/docs", "bin", ".git", "vendor"]
+
+# small debounce so swag+build don't double-trigger
+delay = 300
+
+[log]
+time = true
+color = true
+level = "info"
+
+[run]
+cmd = "bin/api"

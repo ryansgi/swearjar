@@ -1,0 +1,27 @@
+run:
+  timeout: 3m
+
+linters:
+  enable:
+    - revive
+    - govet
+    - staticcheck
+    - gosimple
+    - unused
+    - errcheck
+    - ineffassign
+    - typecheck
+    - lll
+
+linters-settings:
+  lll:
+    line-length: 120
+    tab-width: 2
+    allow-long-lines: false
+  revive:
+    rules:
+      - name: exported
+        severity: error
+
+issues:
+  exclude-use-default: false

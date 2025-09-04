@@ -1,0 +1,66 @@
+{
+  "folders": [{ "path": "." }],
+  "settings": {
+    "files.associations": { "*.css": "tailwindcss" },
+    "css.lint.unknownAtRules": "ignore",
+
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true,
+    "editor.rulers": [120],
+
+    // Go
+    "gopls": {
+      "staticcheck": true,
+      "formatting.gofumpt": true,
+      "analyses": {
+        "infertypeargs": false
+      },
+      "build.buildFlags": ["-tags=swag"]
+    },
+    "[go]": {
+      "editor.defaultFormatter": "golang.go",
+      "editor.insertSpaces": false,
+      "editor.tabSize": 2,
+      "editor.codeActionsOnSave": {
+        "source.organizeImports": "explicit"
+      }
+    },
+    "go.toolsEnvVars": {
+      "GOEXPERIMENT": "jsonv2"
+    },
+    "go.lintTool": "golangci-lint",
+    "go.lintOnSave": "package",
+    "go.formatTool": "gofmt",
+    "go.formatFlags": [
+      "--max-len=120",
+      "--max-line-length=120",
+      "--base-formatter=gofumpt",
+      "--shorten-comments"
+    ],
+
+    // JS / TS
+    "[javascript]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode",
+      "editor.codeActionsOnSave": { "source.fixAll.eslint": "explicit" }
+    },
+    "[typescript]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode",
+      "editor.codeActionsOnSave": { "source.fixAll.eslint": "explicit" }
+    },
+
+    // Housekeeping
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+    "files.trimFinalNewlines": true
+  },
+  "extensions": {
+    "recommendations": [
+      "dsznajder.es7-react-js-snippets",
+      "golang.go",
+      "esbenp.prettier-vscode",
+      "dbaeumer.vscode-eslint",
+      "bradlc.vscode-tailwindcss",
+      "streetsidesoftware.code-spell-checker"
+    ]
+  }
+}
