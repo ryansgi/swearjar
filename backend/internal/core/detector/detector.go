@@ -51,24 +51,23 @@ func (d *Detector) Scan(norm string) []Hit {
 		return hits
 	}
 
-	// 1) Templates (regex). Record spans for every match.
+	// 1) Templates (regex). Emit one hit per match with the matched text as term.
 	for i, re := range d.p.Compiled {
 		idxs := re.FindAllStringIndex(norm, -1)
 		if len(idxs) == 0 {
 			continue
 		}
 		meta := d.p.Templates[i]
-		h := Hit{
-			Term:            meta.PatternExpanded,
-			Category:        meta.Category,
-			Severity:        meta.Severity,
-			Source:          SourceTemplate,
-			DetectorVersion: d.version,
-		}
 		for _, pr := range idxs {
-			h.Spans = append(h.Spans, [2]int{pr[0], pr[1]})
+			hits = append(hits, Hit{
+				Term:            norm[pr[0]:pr[1]], // store matched substring, not the regex
+				Category:        meta.Category,
+				Severity:        meta.Severity,
+				Source:          SourceTemplate,
+				DetectorVersion: d.version,
+				Spans:           [][2]int{{pr[0], pr[1]}},
+			})
 		}
-		hits = append(hits, h)
 	}
 
 	// 2) Lemmas (multi-substring search with conservative boundaries).
@@ -175,8 +174,7 @@ func mergeHits(in []Hit) []Hit {
 	return out
 }
 
-// --- tiny KMP for predictable offsets ---
-
+// indexKMP is a Knuth-Morris-Pratt substring search implementation
 func indexKMP(text, pat string) int {
 	if len(pat) == 0 {
 		return 0

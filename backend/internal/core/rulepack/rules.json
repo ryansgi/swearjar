@@ -1,22 +1,188 @@
 {
   "version": 1,
   "templates": [
-    { "pattern": "fuck you {TARGET_BOT}", "category": "tool", "severity": 3 },
-    { "pattern": "screw you {TARGET_TOOL}", "category": "tool", "severity": 2 }
+    {
+      "pattern": "\\bfuck\\s+you[\\s,]+(?:{TARGET_BOT})\\b",
+      "category": "bot_rage",
+      "severity": 3
+    },
+    {
+      "pattern": "\\bfuck\\s+you[\\s,]+(?:{TARGET_TOOL})\\b",
+      "category": "tooling_rage",
+      "severity": 3
+    },
+    {
+      "pattern": "\\b(?:{TARGET_BOT})\\s+(?:can|should)\\s+(?:die|fuck off)\\b",
+      "category": "bot_rage",
+      "severity": 3
+    },
+    {
+      "pattern": "\\b(?:{TARGET_TOOL})\\s+(?:can|should)\\s+(?:die|fuck off)\\b",
+      "category": "tooling_rage",
+      "severity": 3
+    },
+
+    {
+      "pattern": "\\b(?:stupid|dumb|useless)\\s+(?:{TARGET_BOT})\\b",
+      "category": "bot_rage",
+      "severity": 2
+    },
+    {
+      "pattern": "\\b(?:stupid|dumb|useless)\\s+(?:{TARGET_TOOL})\\b",
+      "category": "tooling_rage",
+      "severity": 2
+    },
+    {
+      "pattern": "\\bthanks[, ]*(?:{TARGET_BOT}|{TARGET_TOOL})[, ]*(?:jerk|idiot)\\b",
+      "category": "tooling_rage",
+      "severity": 2
+    },
+
+    {
+      "pattern": "\\b(?:{TARGET_TOOL})\\s+(?:keeps|kept|is)\\s+(?:breaking|borked|trash|garbage)\\b",
+      "category": "tooling_rage",
+      "severity": 2
+    },
+    {
+      "pattern": "\\b(?:{TARGET_BOT})\\s+(?:is|was)\\s+(?:broken|trash|garbage)\\b",
+      "category": "bot_rage",
+      "severity": 2
+    },
+
+    {
+      "pattern": "\\b(?:i|we)\\s+(?:fucked|screwed|mess(?:ed)?)\\s+up\\b",
+      "category": "self_own",
+      "severity": 2
+    },
+    {
+      "pattern": "\\bthis\\s+(?:code|commit|pr|build)\\s+is\\s+(?:crap|trash|garbage)\\b",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "pattern": "\\bwtf(?:\\s+(?:{TARGET_TOOL}|{TARGET_BOT}))?\\b",
+      "category": "generic",
+      "severity": 1
+    }
   ],
+
   "slots": {
-    "TARGET_BOT": ["dependabot", "renovate", "mergify", "stryker"],
-    "TARGET_TOOL": ["lint", "linter", "prettier", "eslint", "ci", "build"]
+    "TARGET_BOT": [
+      "dependabot",
+      "renovate",
+      "mergify",
+      "greenkeeper",
+      "codecov",
+      "codeql",
+      "stryker",
+      "trivy",
+      "semantic-release",
+      "snyk",
+      "github actions",
+      "oss-fuzz"
+    ],
+    "TARGET_TOOL": [
+      "linter",
+      "eslint",
+      "prettier",
+      "flake8",
+      "black",
+      "pylint",
+      "isort",
+      "mypy",
+      "golangci-lint",
+      "rustfmt",
+      "cargo",
+      "tsc",
+      "typescript",
+      "webpack",
+      "vite",
+      "jest",
+      "mocha",
+      "karma",
+      "vitest",
+      "pytest",
+      "nose",
+      "junit",
+      "npm",
+      "yarn",
+      "pnpm",
+      "pip",
+      "poetry",
+      "pipenv",
+      "gradle",
+      "maven",
+      "sbt",
+      "bazel",
+      "cmake",
+      "make",
+      "ci",
+      "build",
+      "tests",
+      "formatter",
+      "coverage"
+    ]
   },
+
   "lemmas": [
     { "term": "fuck", "category": "generic", "severity": 2 },
     { "term": "shit", "category": "generic", "severity": 1 },
-    { "term": "bitch", "category": "generic", "severity": 2 }
+    { "term": "bullshit", "category": "generic", "severity": 1 },
+    { "term": "wtf", "category": "generic", "severity": 1 },
+    { "term": "ffs", "category": "generic", "severity": 1 },
+    { "term": "damn", "category": "generic", "severity": 1 },
+    { "term": "dammit", "category": "generic", "severity": 1 },
+    { "term": "crap", "category": "generic", "severity": 1 },
+    { "term": "garbage", "category": "generic", "severity": 1 },
+    { "term": "trash", "category": "generic", "severity": 1 },
+    { "term": "bitch", "category": "harassment", "severity": 2 },
+    { "term": "asshole", "category": "harassment", "severity": 2 },
+    { "term": "dumbass", "category": "harassment", "severity": 2 },
+    { "term": "jerk", "category": "harassment", "severity": 1 },
+    { "term": "idiot", "category": "harassment", "severity": 1 },
+
+    { "term": "screwup", "category": "self_own", "severity": 1 },
+    { "term": "borked", "category": "tooling_rage", "severity": 1 },
+    { "term": "broken", "category": "tooling_rage", "severity": 1 },
+    { "term": "useless", "category": "tooling_rage", "severity": 1 }
   ],
+
   "stoplist": [
     "assistant",
     "assess",
-    "Scunthorpe",
-    "passage"
+    "assessment",
+    "assessor",
+    "assimilate",
+    "associate",
+    "association",
+    "passage",
+    "passive",
+    "compass",
+    "compassion",
+    "password",
+    "surpass",
+    "class",
+    "classic",
+    "classify",
+    "classification",
+    "declassify",
+    "assign",
+    "assignment",
+    "reassignment",
+    "scunthorpe",
+    "shiitake",
+    "shiitake mushroom",
+    "shihtzu",
+    "shih tzu",
+    "bitchute",
+    "passing",
+    "passcode",
+    "passenger",
+    "grasshopper",
+    "morass",
+    "sass",
+    "sassc",
+    "javascript",
+    "typescript"
   ]
 }

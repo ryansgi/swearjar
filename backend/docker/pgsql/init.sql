@@ -60,6 +60,7 @@ CREATE INDEX ix_utterances_text_norm_trgm ON utterances USING gin (text_normaliz
 CREATE INDEX ix_utterances_repo_hid_time ON utterances(repo_hid, created_at);
 CREATE INDEX ix_utterances_actor_hid_time ON utterances(actor_hid, created_at);
 CREATE INDEX ix_utterances_created_at ON utterances(created_at);
+CREATE INDEX ix_utterances_created_id ON utterances (created_at, id);
 
 -- Derived: hits (store HIDs for hot filters)
 CREATE TABLE hits (
@@ -230,3 +231,14 @@ CREATE TABLE ingest_hours (
 );
 
 CREATE INDEX ix_ingest_hours_status ON ingest_hours(status) WHERE finished_at IS NULL;
+
+-- Seed initial rulepack (v1)
+-- checksum_sha256 is SHA-256 of the raw rules.json file
+INSERT INTO rulepacks (version, description, checksum_sha256)
+VALUES
+  (
+    1,
+    'seed: embedded rules.json v1',
+    '\x644080b9f56902cb95ce7f58dc6115d33819db135dbffbd1cc0f36f7bbcdcdc7'
+  )
+ON CONFLICT (version) DO NOTHING;
