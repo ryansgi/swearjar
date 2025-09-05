@@ -1,3 +1,4 @@
+// Package repo provides the stats repository implementation
 package repo
 
 import (
