@@ -121,6 +121,20 @@ func (c Conf) MayInt(key string, def int) int {
 	return def
 }
 
+// MayFloat64 returns the value or def if missing/empty; logs and returns def if invalid
+func (c Conf) MayFloat64(key string, def float64) float64 {
+	s := strings.TrimSpace(os.Getenv(c.key(key)))
+	if s == "" {
+		return def
+	}
+	if v, err := strconv.ParseFloat(s, 64); err == nil {
+		return v
+	}
+	logger.Get().Warn().Str("key", c.key(key)).Str("value", s).Float64("default", def).
+		Msg("invalid float64; using default")
+	return def
+}
+
 // MayBool returns the value or def if missing/empty; logs and returns def if invalid
 func (c Conf) MayBool(key string, def bool) bool {
 	s := strings.TrimSpace(os.Getenv(c.key(key)))

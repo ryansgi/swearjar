@@ -37,3 +37,19 @@ func MustPrefix(s string) string {
 	}
 	return s
 }
+
+// EmptyToNil returns empty string if s is all whitespace, otherwise returns s
+func EmptyToNil(s string) string {
+	if std.TrimSpace(s) == "" {
+		return ""
+	}
+	return s
+}
+
+// Ptr returns a pointer to s, or nil if s is empty
+func Ptr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
