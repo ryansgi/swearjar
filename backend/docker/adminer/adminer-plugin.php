@@ -2,7 +2,7 @@
 class AdminerLoginServers {
     function __construct() {
         $this->servers = [
-            "Local" => $this->parseEnv('SERVICE_PGSQL_DBURL_LOCAL'),
+            "Local" => $this->parseEnv('SERVICE_PGSQL_DBURL_SU'),
         ];
 
         if (isset($_POST["auth"]["custom_server"]) && $_POST["auth"]["custom_server"]) {
