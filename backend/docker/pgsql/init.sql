@@ -7,6 +7,7 @@
 -- Extensions
 CREATE EXTENSION "uuid-ossp";
 CREATE EXTENSION pg_trgm;
+CREATE EXTENSION pg_cld2;
 
 -- Enums
 CREATE TYPE source_enum AS ENUM ('commit','issue','pr','comment');

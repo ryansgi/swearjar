@@ -29,7 +29,10 @@ x-go-service: &go-service
 services:
   postgres:
     container_name: ${SERVICE_PREFIX:-sw_}pgsql
-    image: postgres:18beta3
+    #image: postgres:18beta3
+    build:
+      context: .
+      dockerfile: ./backend/docker/pgsql/Dockerfile
     ports:
       - "${POSTGRES_PORT:-5432}:${POSTGRES_PORT:-5432}"
     environment:
