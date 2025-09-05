@@ -4,60 +4,56 @@ package domain
 // Query window and filters kept small and explicit
 // Times are ISO8601 without timezone
 
-// TimeRange defines a start and end time for queries
+// TimeRange defines a start and end time for queries (inclusive, YYYY-MM-DD UTC)
 type TimeRange struct {
 	Start string `json:"start" validate:"required,datetime=2006-01-02" example:"2025-08-01"`
-	End   string `json:"end" validate:"required,datetime=2006-01-02" example:"2025-08-31"`
+	End   string `json:"end"   validate:"required,datetime=2006-01-02" example:"2025-08-31"`
 }
 
-// PageOpts defines pagination options
+// PageOpts defines pagination options for queries
 type PageOpts struct {
 	Cursor string `json:"cursor,omitempty" example:"eyJvZmZzZXQiOjEwMH0"`
-	Limit  int    `json:"limit,omitempty" validate:"omitempty,min=1,max=500" example:"100"`
+	Limit  int    `json:"limit,omitempty"  validate:"omitempty,min=1,max=500" example:"100"`
 }
 
-// ByLangInput buckets samples by programming language
+// ByLangInput buckets daily by language (optional repo/lang/severity filters)
+// NOTE: min_severity uses DB enum values: mild|strong|slur_masked
 type ByLangInput struct {
-	Range TimeRange `json:"range"`
-	// optional filters
-	Repo   string `json:"repo,omitempty" validate:"omitempty,min=1,max=200" example:"golang/go"`
-	Lang   string `json:"lang,omitempty" validate:"omitempty,alpha" example:"en"`
-	MinSev string `json:"min_severity,omitempty" validate:"omitempty,oneof=info low medium high" example:"low"`
+	Range       TimeRange `json:"range"`
+	Repo        string    `json:"repo,omitempty" validate:"omitempty,regex=^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" example:"golang/go"`
+	Lang        string    `json:"lang,omitempty" validate:"omitempty,regex=^[A-Za-z-]{2,10}$" example:"en"`
+	MinSeverity string    `json:"min_severity,omitempty" validate:"omitempty,oneof=mild strong slur_masked" example:"mild"`
 }
 
-// ByLangRow represents a row in the ByLang output
+// ByLangRow is a daily bucket of hits and utterances by language
 type ByLangRow struct {
-	Day       string `json:"day" example:"2025-08-01"`
-	Lang      string `json:"lang" example:"en"`
-	Hits      int64  `json:"hits" example:"42"`
-	Utterings int64  `json:"utterances" example:"420"`
+	Day        string `json:"day"        example:"2025-08-01"`
+	Lang       string `json:"lang"       example:"en"`
+	Hits       int64  `json:"hits"       example:"42"`
+	Utterances int64  `json:"utterances" example:"420"`
 }
 
-// Repo buckets
-
-// ByRepoInput is the input for repo buckets
+// ByRepoInput top repos in time window (optional lang filter)
 type ByRepoInput struct {
 	Range TimeRange `json:"range"`
-	Lang  string    `json:"lang,omitempty" validate:"omitempty,alpha" example:"en"`
+	Lang  string    `json:"lang,omitempty" validate:"omitempty,regex=^[A-Za-z-]{2,10}$" example:"en"`
 }
 
-// ByRepoRow represents a row in the ByRepo output
+// ByRepoRow is a repo and its hit count
 type ByRepoRow struct {
 	Repo string `json:"repo" example:"golang/go"`
 	Hits int64  `json:"hits" example:"7"`
 }
 
-// Category buckets
-
-// ByCategoryInput is the input for category buckets
+// ByCategoryInput buckets by category and severity (optional repo filter)
 type ByCategoryInput struct {
 	Range TimeRange `json:"range"`
-	Repo  string    `json:"repo,omitempty" validate:"omitempty,min=1,max=200" example:"golang/go"`
+	Repo  string    `json:"repo,omitempty" validate:"omitempty,regex=^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" example:"golang/go"`
 }
 
-// ByCategoryRow represents a row in the ByCategory output
+// ByCategoryRow is a bucket of hits by category and severity
 type ByCategoryRow struct {
-	Category string `json:"category" example:"bot-directed"`
-	Severity string `json:"severity" example:"medium"`
-	Hits     int64  `json:"hits" example:"9"`
+	Category string `json:"category" example:"tooling_rage"`
+	Severity string `json:"severity" example:"mild"`
+	Hits     int64  `json:"hits"     example:"9"`
 }

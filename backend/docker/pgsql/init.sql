@@ -21,7 +21,7 @@ CREATE TYPE evidence_kind_enum AS ENUM ('repo_file','actor_gist');
 
 -- Domains
 CREATE DOMAIN sha256_bytes AS bytea CHECK (octet_length(VALUE) = 32);
-CREATE DOMAIN hid_bytes AS bytea CHECK (octet_length(VALUE) = 32);
+CREATE DOMAIN hid_bytes   AS bytea CHECK (octet_length(VALUE) = 32);
 
 -- Rulepack meta (versioning)
 CREATE TABLE rulepacks (
@@ -240,8 +240,7 @@ VALUES
     1,
     'seed: embedded rules.json v1',
     '\x644080b9f56902cb95ce7f58dc6115d33819db135dbffbd1cc0f36f7bbcdcdc7'
-  )
-ON CONFLICT (version) DO NOTHING;
+  );
 
 -- Table for ingest job leases.
 -- single row per hour, claimed_at is when the lease was taken
@@ -249,3 +248,125 @@ CREATE TABLE ingest_hours_leases (
   hour_utc timestamptz PRIMARY KEY,
   claimed_at timestamptz NOT NULL DEFAULT NOW()
 );
+
+---------------------------------------------------------------------
+-- HALL MONITOR: catalog of repositories & actors + queues + rollups
+---------------------------------------------------------------------
+
+-- Repositories catalog (coding language + popularity/context)
+-- (privacy-first; identities never exposed unless opted-in)
+CREATE TABLE repositories (
+  repo_id         bigint PRIMARY KEY,            -- GitHub numeric id from events
+  full_name       text NOT NULL,                 -- owner/name
+  default_branch  text,
+  primary_lang    text,                          -- repo.language
+  languages       jsonb,                         -- /languages map: lang->bytes
+  stars           int,
+  forks           int,
+  subscribers     int,
+  open_issues     int,
+  license_key     text,
+  is_fork         boolean,
+  pushed_at       timestamptz,
+  updated_at      timestamptz,
+  fetched_at      timestamptz NOT NULL DEFAULT now(),
+  next_refresh_at timestamptz,                  -- scheduler hint
+  etag            text,                         -- for conditional GETs
+  api_url         text,
+  opted_in_at     timestamptz                   -- null unless consented
+);
+
+CREATE INDEX repositories_primary_lang_idx ON repositories (primary_lang);
+CREATE INDEX repositories_next_refresh_idx ON repositories (next_refresh_at);
+CREATE INDEX repositories_pushed_at_idx ON repositories (pushed_at DESC);
+
+-- Actors catalog (privacy-first; identities never exposed unless opted-in)
+CREATE TABLE actors (
+  actor_id        bigint PRIMARY KEY,           -- GitHub numeric id from events
+  login           text,
+  name            text,
+  type            text,                         -- "User" | "Organization"
+  company         text,
+  location        text,
+  bio             text,
+  blog            text,
+  twitter_username text,
+  followers       int,
+  following       int,
+  public_repos    int,
+  public_gists    int,
+  created_at      timestamptz,
+  updated_at      timestamptz,
+  fetched_at      timestamptz NOT NULL DEFAULT now(),
+  next_refresh_at timestamptz,
+  etag            text,
+  api_url         text,
+  opted_in_at     timestamptz                   -- null unless consented
+);
+
+CREATE UNIQUE INDEX actors_login_idx ON actors (lower(login));
+CREATE INDEX actors_next_refresh_idx ON actors (next_refresh_at);
+
+-- Non-blocking queues for hallmonitor worker
+CREATE TABLE repo_catalog_queue (
+  repo_id         bigint PRIMARY KEY,
+  priority        smallint NOT NULL DEFAULT 0,  -- 0=normal, higher=sooner
+  attempts        int      NOT NULL DEFAULT 0,
+  last_error      text,
+  next_attempt_at timestamptz NOT NULL DEFAULT now(),
+  enqueued_at     timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE actor_catalog_queue (
+  actor_id        bigint PRIMARY KEY,
+  priority        smallint NOT NULL DEFAULT 0,
+  attempts        int      NOT NULL DEFAULT 0,
+  last_error      text,
+  next_attempt_at timestamptz NOT NULL DEFAULT now(),
+  enqueued_at     timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX repo_catalog_queue_due_idx  ON repo_catalog_queue  (next_attempt_at, priority DESC);
+CREATE INDEX actor_catalog_queue_due_idx ON actor_catalog_queue (next_attempt_at, priority DESC);
+
+-- Retroactive population helpers (seed queues from existing utterances)
+INSERT INTO repo_catalog_queue (repo_id)
+SELECT DISTINCT u.repo_id
+FROM utterances u
+LEFT JOIN repositories r ON r.repo_id = u.repo_id
+WHERE r.repo_id IS NULL
+ON CONFLICT (repo_id) DO NOTHING;
+
+INSERT INTO actor_catalog_queue (actor_id)
+SELECT DISTINCT u.actor_id
+FROM utterances u
+LEFT JOIN actors a ON a.actor_id = u.actor_id
+WHERE a.actor_id IS NULL
+ON CONFLICT (actor_id) DO NOTHING;
+
+-- Language-centric aggregates (coding language, not spoken)
+CREATE MATERIALIZED VIEW agg_daily_hits_by_code_lang AS
+SELECT
+  date_trunc('day', u.created_at) AS day,
+  COALESCE(r.primary_lang, 'Unknown') AS code_lang,
+  count(*) AS hits
+FROM hits h
+JOIN utterances u ON u.id = h.utterance_id
+LEFT JOIN repositories r ON r.repo_id = u.repo_id
+GROUP BY 1, 2;
+
+CREATE INDEX agg_dhcl_day_lang_idx ON agg_daily_hits_by_code_lang (day, code_lang);
+
+-- Privacy-preserving actor+code_language rollup (uses actor_hid from utterances)
+CREATE MATERIALIZED VIEW agg_daily_hits_by_actor_lang AS
+SELECT
+  date_trunc('day', u.created_at) AS day,
+  COALESCE(r.primary_lang, 'Unknown') AS code_lang,
+  u.actor_hid AS actor_hid,
+  count(*) AS hits
+FROM hits h
+JOIN utterances u ON u.id = h.utterance_id
+LEFT JOIN repositories r ON r.repo_id = u.repo_id
+GROUP BY 1, 2, 3;
+
+CREATE INDEX agg_dhalb_day_lang_idx ON agg_daily_hits_by_actor_lang (day, code_lang);

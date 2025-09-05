@@ -34,13 +34,18 @@ func New(db repokit.TxRunner, binder repokit.Binder[repo.Repo]) *Svc {
 
 // ByLang returns swearjar usage stats by programming language
 func (s *Svc) ByLang(ctx context.Context, in domain.ByLangInput) ([]domain.ByLangRow, error) {
-	rows, err := s.Repo.ByLang(ctx, in.Range.Start, in.Range.End, in.Repo, in.Lang, in.MinSev)
+	rows, err := s.Repo.ByLang(ctx, in.Range.Start, in.Range.End, in.Repo, in.Lang, in.MinSeverity)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]domain.ByLangRow, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, domain.ByLangRow{Day: r.Day, Lang: r.Lang, Hits: r.Hits, Utterings: r.Utterings})
+		out = append(out, domain.ByLangRow{
+			Day:        r.Day,
+			Lang:       r.Lang,
+			Hits:       r.Hits,
+			Utterances: r.Utterances,
+		})
 	}
 	return out, nil
 }

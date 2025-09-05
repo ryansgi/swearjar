@@ -10,12 +10,15 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"swearjar/internal/platform/logger"
 )
 
 const (
 	baseURL          = "https://data.gharchive.org"
 	defaultHTTPTO    = 0
 	maxScanTokenSize = 32 * 1024 * 1024
+	sampleRawMax     = 2048 // max bytes of raw JSON to log for the sample
 )
 
 // Fetcher fetches a reader for a given hour
@@ -59,12 +62,13 @@ func (f *HTTPFetcher) Fetch(ctx context.Context, hour HourRef) (io.ReadCloser, e
 
 // Reader streams EventEnvelope items from a gzip file
 type Reader struct {
-	r      io.ReadCloser
-	gz     *gzip.Reader
-	sc     *bufio.Scanner
-	err    error
-	events int
-	bytes  int64
+	r       io.ReadCloser
+	gz      *gzip.Reader
+	sc      *bufio.Scanner
+	err     error
+	events  int
+	bytes   int64
+	sampled bool // logs exactly one sample raw line per gzip
 }
 
 // NewReader creates a new Reader from the given ReadCloser
@@ -107,6 +111,17 @@ func (rd *Reader) Next() (EventEnvelope, error) {
 		}
 		rd.events++
 		rd.bytes += int64(len(cp) + 1) // include newline
+
+		// Log a single raw-line sample (first valid JSON line in this gzip)
+		if !rd.sampled {
+			rd.sampled = true
+			l := logger.Named("gharchive")
+			l.Debug().
+				Int("line_bytes", len(cp)).
+				Str("sample_raw", truncateUTF8(cp, sampleRawMax)).
+				Msg("gharchive: sample raw line")
+		}
+
 		return env, nil
 	}
 }
@@ -130,4 +145,21 @@ func (rd *Reader) Close() error {
 // Stats returns the number of events parsed and total uncompressed bytes read so far
 func (rd *Reader) Stats() (events int, bytes int64) {
 	return rd.events, rd.bytes
+}
+
+// truncateUTF8 returns a string made from b, truncated to at most max bytes,
+// backing up to a UTF-8 boundary if needed, and appending an ellipsis if truncated.
+func truncateUTF8(b []byte, max int) string {
+	if max <= 0 || len(b) <= max {
+		return string(b)
+	}
+	i := max
+	// back up to the start of a rune (0b10xxxxxx indicates continuation byte)
+	for i > 0 && (b[i]&0xC0) == 0x80 {
+		i--
+	}
+	if i <= 0 {
+		i = max
+	}
+	return string(b[:i]) + "…"
 }
