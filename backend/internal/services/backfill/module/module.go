@@ -3,6 +3,8 @@ package module
 
 import (
 	"swearjar/internal/modkit"
+	"swearjar/internal/modkit/httpkit"
+	modreg "swearjar/internal/modkit/module" // registry (Register/PortsAs/Reset)
 	"swearjar/internal/modkit/repokit"
 
 	"swearjar/internal/core/normalize"
@@ -11,6 +13,8 @@ import (
 	"swearjar/internal/services/backfill/ingest"
 	"swearjar/internal/services/backfill/repo"
 	"swearjar/internal/services/backfill/service"
+
+	detectmod "swearjar/internal/services/detect/module"
 )
 
 // Ports defines the backfill module ports
@@ -25,8 +29,10 @@ type Module struct {
 }
 
 // New constructs the backfill module
-// It wires up all the adapters and the service using config from deps.Cfg
-// It does not mount any routes.
+// It wires adapters and the service using config from deps.Cfg.
+// If detection is enabled (CORE_BACKFILL_DETECT or config), it looks up the
+// already-registered detect module from the global registry and assigns its
+// Writer port to svc.Detect
 func New(deps modkit.Deps) *Module {
 	opts := FromConfig(deps.Cfg)
 
@@ -41,6 +47,7 @@ func New(deps modkit.Deps) *Module {
 
 	leaseFn := guardrails.MakeAdvisoryLease(deps)
 
+	// Construct the backfill service
 	svc := service.New(
 		repokit.TxRunner(deps.PG), storeBinder,
 		fetch, reader, extract, norm,
@@ -53,9 +60,20 @@ func New(deps modkit.Deps) *Module {
 			ReadTimeout:   opts.ReadTimeout,
 			MaxRangeHours: opts.MaxRangeHours,
 			EnableLeases:  opts.EnableLeases,
+			InsertChunk:   0, // keep default
+			DetectEnabled: opts.DetectEnabled,
 		},
 		leaseFn,
+		nil, // detect writer (optional); set below when enabled and available
 	)
+
+	// If detect is enabled, resolve detect module's Writer from the registry.
+	// main.go registers detect before backfill when --detect is used
+	if opts.DetectEnabled {
+		if dp, ok := modreg.PortsAs[detectmod.Ports]("detect"); ok && dp.Writer != nil {
+			svc.Detect = dp.Writer
+		}
+	}
 
 	m := &Module{deps: deps}
 	m.ports = Ports{Runner: svc}
@@ -72,4 +90,4 @@ func (m *Module) Ports() any { return m.ports }
 func (m *Module) Prefix() string { return "" }
 
 // MountRoutes is a no-op as backfill has no routes
-func (m *Module) MountRoutes(_ interface{}) {}
+func (m *Module) MountRoutes(_ httpkit.Router) {}

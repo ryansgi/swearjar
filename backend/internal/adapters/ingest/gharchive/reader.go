@@ -14,7 +14,7 @@ import (
 
 const (
 	baseURL          = "https://data.gharchive.org"
-	defaultHTTPTO    = 30 * time.Second
+	defaultHTTPTO    = 0
 	maxScanTokenSize = 32 * 1024 * 1024
 )
 
@@ -28,9 +28,9 @@ type HTTPFetcher struct {
 	Client *http.Client
 }
 
-// NewHTTPFetcher creates a new HTTPFetcher with default settings
-func NewHTTPFetcher() *HTTPFetcher {
-	return &HTTPFetcher{Client: &http.Client{Timeout: defaultHTTPTO}}
+// NewHTTPFetcherWithTimeout creates a new HTTPFetcher with default settings
+func NewHTTPFetcherWithTimeout(d time.Duration) *HTTPFetcher {
+	return &HTTPFetcher{Client: &http.Client{Timeout: d}}
 }
 
 // Fetch returns a reader for the gzip file for the given hour

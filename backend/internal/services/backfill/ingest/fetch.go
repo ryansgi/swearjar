@@ -27,10 +27,12 @@ func NewFetcher(deps modkit.Deps) domain.Fetcher {
 	retainDays := ing.MayInt("RETAIN_MAX_DAYS", 0)
 	retainBytes := int64(ing.MayInt("RETAIN_MAX_BYTES", 0))
 
+	httpTO := time.Duration(ing.MayInt("HTTP_TIMEOUT_SECONDS", 0)) * time.Second // 0 == no client timeout
+
 	return &fetcher{
 		f: gharchive.NewCachedFetcher(
 			cacheDir,
-			gharchive.NewHTTPFetcher(),
+			gharchive.NewHTTPFetcherWithTimeout(httpTO),
 			gharchive.WithRefreshRecent(refreshH),
 			gharchive.WithRetention(time.Duration(retainDays)*24*time.Hour, retainBytes),
 		),

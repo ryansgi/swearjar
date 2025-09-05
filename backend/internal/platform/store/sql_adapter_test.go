@@ -53,6 +53,7 @@ func (r *pgxFakeRows) CommandTag() pgconn.CommandTag { return r.ct }
 func (r *pgxFakeRows) FieldDescriptions() []pgconn.FieldDescription {
 	return r.fields
 }
+
 func (r *pgxFakeRows) Next() bool {
 	if r.err != nil {
 		return false
@@ -67,6 +68,7 @@ func (r *pgxFakeRows) Values() ([]any, error) {
 	}
 	return r.data[r.idx], nil
 }
+
 func (r *pgxFakeRows) Scan(dest ...any) error {
 	if r.err != nil {
 		return r.err
@@ -110,12 +112,14 @@ func (f *pgxFakeTx) Exec(ctx context.Context, sql string, args ...any) (pgconn.C
 	}
 	return pgconn.NewCommandTag("OK"), nil
 }
+
 func (f *pgxFakeTx) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
 	if f.queryFn != nil {
 		return f.queryFn(ctx, sql, args...)
 	}
 	return newPgxFakeRows([]string{"n"}, [][]any{{1}}), nil
 }
+
 func (f *pgxFakeTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
 	if f.queryRowFn != nil {
 		return f.queryRowFn(ctx, sql, args...)
@@ -132,6 +136,7 @@ func (f *pgxFakeTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.R
 
 // Unused pgx.Tx methods to satisfy interface
 func (f *pgxFakeTx) SendBatch(context.Context, *pgx.Batch) pgx.BatchResults { return nil }
+
 func (f *pgxFakeTx) CopyFrom(context.Context, pgx.Identifier, []string, pgx.CopyFromSource) (int64, error) {
 	return 0, errors.New("not implemented")
 }
@@ -316,7 +321,7 @@ func TestRows_ScanErrorsAndErrPropagation(t *testing.T) {
 
 	{
 		fr := newPgxFakeRows([]string{"n"}, [][]any{})
-		fr.err = errors.New("boom") // <-- safely inside function scope
+		fr.err = errors.New("boom") // safely inside function scope
 
 		rs := rows{r: fr}
 		if rs.Next() {

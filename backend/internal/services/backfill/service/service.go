@@ -11,11 +11,17 @@ import (
 	"sync/atomic"
 	"time"
 
+	detectdom "swearjar/internal/services/detect/domain"
+
 	"swearjar/internal/modkit/repokit"
 	perr "swearjar/internal/platform/errors"
 	"swearjar/internal/services/backfill/domain"
 	"swearjar/internal/services/backfill/guardrails"
 )
+
+// DetectWriterPort is an alias to the detect writer port so module wiring
+// does not need to import the detect domain directly from here if undesired.
+type DetectWriterPort = detectdom.WriterPort
 
 // Config holds configuration options for the backfill service
 type Config struct {
@@ -40,6 +46,9 @@ type Config struct {
 
 	// Insert tuning: per-TX insert chunk size; 0 -> default
 	InsertChunk int
+
+	// Detection toggle: if true, run detector writer after inserts
+	DetectEnabled bool
 }
 
 // Service implements the backfill service
@@ -51,6 +60,9 @@ type Service struct {
 	Extract domain.Extractor
 	Norm    domain.Normalizer
 	Cfg     Config
+
+	// Optional detect writer; used when Cfg.DetectEnabled == true
+	Detect detectdom.WriterPort
 
 	// Lease(ctx, hourUTC, do) should take an hour-scoped advisory lock and run do()
 	Lease func(ctx context.Context, hour time.Time, do func(context.Context) error) error
@@ -66,6 +78,7 @@ func New(
 	n domain.Normalizer,
 	cfg Config,
 	lease func(context.Context, time.Time, func(context.Context) error) error,
+	detectWriter detectdom.WriterPort, // optional detect writer
 ) *Service {
 	if db == nil {
 		panic("backfill.Service requires a non nil TxRunner")
@@ -76,7 +89,9 @@ func New(
 	return &Service{
 		DB: db, Binder: binder,
 		Fetch: f, Reader: rf, Extract: ex, Norm: n,
-		Cfg: cfg, Lease: lease,
+		Cfg:    cfg,
+		Detect: detectWriter,
+		Lease:  lease,
 	}
 }
 
@@ -339,6 +354,75 @@ func (s *Service) runHourUnlocked(ctx context.Context, hr domain.HourRef) (retEr
 		}
 	}
 	dbMS += int(time.Since(t2).Milliseconds())
+
+	// Detection (optional)
+	if s.Cfg.DetectEnabled && s.Detect != nil && len(all) > 0 {
+		type kkey struct{ eventID, source string }
+		counts := make(map[kkey]int, len(all))
+		keys := make([]domain.UKey, 0, len(all))
+		for _, u := range all {
+			k := kkey{eventID: u.EventID, source: u.Source}
+			counts[k]++
+			ord := counts[k] - 1
+			keys = append(keys, domain.UKey{
+				EventID: u.EventID,
+				Source:  u.Source,
+				Ordinal: ord,
+			})
+		}
+
+		var idMap map[domain.UKey]string
+		if err := s.DB.Tx(hrCtx, func(q repokit.Queryer) error {
+			var e error
+			idMap, e = s.Binder.Bind(q).LookupIDs(hrCtx, keys)
+			return e
+		}); err != nil {
+			retErr = err
+			return
+		}
+
+		buildLangPtr := func(s string) *string {
+			if s == "" {
+				return nil
+			}
+			v := s
+			return &v
+		}
+		wbatch := make([]detectdom.WriteInput, 0, len(all))
+		for i, u := range all {
+			k := keys[i]
+			uid := idMap[k]
+			if uid == "" || u.TextNormalized == "" {
+				continue
+			}
+			wbatch = append(wbatch, detectdom.WriteInput{
+				UtteranceID: uid,
+				TextNorm:    u.TextNormalized,
+
+				// denorms for hot filters / correct created_at
+				CreatedAt: u.CreatedAt,
+				Source:    u.Source, // coarse()'d above
+				RepoName:  u.Repo,
+				// RepoHID / ActorHID can be added here if your extractor populates them
+				LangCode: buildLangPtr(u.LangCode),
+			})
+		}
+
+		if len(wbatch) > 0 {
+			wchunk := chunk
+			if wchunk <= 0 {
+				wchunk = 1000
+			}
+			for i := 0; i < len(wbatch); i += wchunk {
+				end := min(i+wchunk, len(wbatch))
+				if _, err := s.Detect.Write(hrCtx, wbatch[i:end]); err != nil {
+					retErr = err
+					return
+				}
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -468,10 +552,7 @@ func applyTxTuning(ctx context.Context, q repokit.Queryer, heavy bool) {
 	}
 }
 
-// treat "hour lease already held" as a benign contention signal
+// treat "hour lease already held" as a contention signal
 func isLeaseHeld(err error) bool {
-	if err == nil {
-		return false
-	}
-	return strings.Contains(strings.ToLower(err.Error()), "hour lease already held")
+	return errors.Is(err, guardrails.ErrLeaseHeld)
 }

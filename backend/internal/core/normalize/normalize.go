@@ -47,6 +47,8 @@ func (n *Normalizer) Normalize(s string) string {
 		return ""
 	}
 
+	s = Sanitize(s)
+
 	// 1 repair UTF-8 drop invalid bytes
 	s = strings.ToValidUTF8(s, "")
 

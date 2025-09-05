@@ -21,6 +21,10 @@ type StorageRepo interface {
 
 	// InsertUtterances inserts a batch of utterances into the storage
 	InsertUtterances(ctx context.Context, us []Utterance) (inserted, deduped int, err error)
+
+	// LookupIDs resolves DB UUIDs (as text) for the given natural keys.
+	// The result is a map from UKey -> utterances.id::text
+	LookupIDs(ctx context.Context, keys []UKey) (map[UKey]string, error)
 }
 
 // Fetcher is the data fetcher interface

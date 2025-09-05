@@ -3,6 +3,7 @@ package gharchive
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"swearjar/internal/platform/logger"
 )
 
 // CachedFetcher fetches GH Archive hours with on disk caching
@@ -67,36 +70,72 @@ func NewCachedFetcher(dir string, base *HTTPFetcher, opts ...CachedOption) *Cach
 	for _, o := range opts {
 		o(c)
 	}
+
+	logger.Named("gharchive").Debug().
+		Str("cache_dir", dir).
+		Dur("refresh_recent", c.refreshRecent).
+		Dur("retain_max_age", c.retainMaxAge).
+		Int64("retain_max_bytes", c.retainMaxBytes).
+		Msg("gharchive: cached fetcher initialized")
+
 	return c
 }
 
 // Fetch returns a reader for the gzip file for the given hour
 // Serves from disk when present and may revalidate recent hours
 func (c *CachedFetcher) Fetch(ctx context.Context, hour HourRef) (io.ReadCloser, error) {
+	l := logger.C(ctx)
+
 	filename := hour.String() + ".json.gz"
 	path := filepath.Join(c.dir, filename)
 	metaPath := path + ".meta"
 
 	// file exists path
 	if fi, err := os.Stat(path); err == nil && fi.Mode().IsRegular() {
+		l.Debug().
+			Str("hour", hour.String()).
+			Str("path", path).
+			Int64("size_bytes", fi.Size()).
+			Msg("gharchive: cache hit")
+
 		// revalidate only for recent hours
 		if c.shouldRevalidate(hour) {
-			rc, _, err := c.tryConditionalFetch(ctx, hour, path, metaPath)
+			l.Debug().
+				Str("hour", hour.String()).
+				Msg("gharchive: attempting conditional revalidation")
+			rc, fromCache, err := c.tryConditionalFetch(ctx, hour, path, metaPath)
 			if err == nil && rc != nil {
+				if fromCache {
+					l.Debug().Str("hour", hour.String()).Msg("gharchive: revalidation 304, reading from cache")
+				} else {
+					l.Debug().Str("hour", hour.String()).Msg("gharchive: revalidation 200, refreshed cache and streaming")
+				}
 				c.maybeCleanup()
 				return rc, nil
 			}
-			// best effort fallback to local file
+			if err != nil {
+				l.Debug().
+					Str("hour", hour.String()).
+					Err(err).
+					Msg("gharchive: conditional fetch failed, falling back to local file")
+			}
 		}
+
 		f, err := os.Open(path)
 		if err != nil {
+			l.Error().Str("path", path).Err(err).Msg("gharchive: failed to open cached file")
 			return nil, err
 		}
+		l.Debug().Str("hour", hour.String()).Msg("gharchive: reading from cache")
 		c.maybeCleanup()
 		return f, nil
 	}
 
 	// cache miss path
+	l.Debug().
+		Str("hour", hour.String()).
+		Str("path", path).
+		Msg("gharchive: cache miss, downloading")
 	return c.downloadAndStore(ctx, hour, path, metaPath, false)
 }
 
@@ -116,6 +155,8 @@ func (c *CachedFetcher) tryConditionalFetch(
 	path string,
 	metaPath string,
 ) (io.ReadCloser, bool, error) {
+	l := logger.C(ctx)
+
 	url := fmt.Sprintf("%s/%s.json.gz", baseURL, hour.String())
 
 	meta, _ := loadMeta(metaPath)
@@ -132,6 +173,13 @@ func (c *CachedFetcher) tryConditionalFetch(
 			req.Header.Set("If-Modified-Since", meta.LastModified)
 		}
 	}
+
+	l.Debug().
+		Str("hour", hour.String()).
+		Str("url", url).
+		Str("if_none_match", req.Header.Get("If-None-Match")).
+		Str("if_modified_since", req.Header.Get("If-Modified-Since")).
+		Msg("gharchive: conditional GET")
 
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -150,17 +198,29 @@ func (c *CachedFetcher) tryConditionalFetch(
 		}
 		meta.LastChecked = time.Now().UTC()
 		_ = saveMeta(metaPath, meta)
+		l.Debug().
+			Str("hour", hour.String()).
+			Str("path", path).
+			Msg("gharchive: 304 Not Modified, serving cached file")
 		f, err := os.Open(path)
 		return f, true, err
 
 	case http.StatusOK:
 		// overwrite cache with new bytes
-
-		rc, err := c.writeResponseToCache(resp, path, metaPath, true)
+		l.Debug().
+			Str("hour", hour.String()).
+			Str("url", url).
+			Msg("gharchive: 200 OK, writing new bytes to cache")
+		rc, err := c.writeResponseToCache(ctx, resp, path, metaPath, true)
 		return rc, false, err
 
 	default:
 		// unexpected status, fall back to local file when present
+		l.Debug().
+			Str("hour", hour.String()).
+			Str("url", url).
+			Int("status", resp.StatusCode).
+			Msg("gharchive: unexpected status on conditional GET")
 		if _, err := os.Stat(path); err == nil {
 			f, oerr := os.Open(path)
 			return f, true, oerr
@@ -176,13 +236,17 @@ func (c *CachedFetcher) downloadAndStore(
 	metaPath string,
 	markAsHit bool,
 ) (io.ReadCloser, error) {
+	l := logger.C(ctx)
+
 	url := fmt.Sprintf("%s/%s.json.gz", baseURL, hour.String())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
+	l.Debug().Str("hour", hour.String()).Str("url", url).Msg("gharchive: starting download")
 	resp, err := c.client.Do(req)
 	if err != nil {
+		l.Error().Str("url", url).Err(err).Msg("gharchive: download request failed")
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -192,10 +256,12 @@ func (c *CachedFetcher) downloadAndStore(
 		return nil, fmt.Errorf("gharchive: unexpected status %d for %s", resp.StatusCode, url)
 	}
 	// on first download we return a reader that does not expose Name to keep cache hit metrics correct
-	rc, err := c.writeResponseToCache(resp, path, metaPath, !markAsHit)
+	rc, err := c.writeResponseToCache(ctx, resp, path, metaPath, !markAsHit)
 	if err != nil {
+		l.Error().Str("hour", hour.String()).Err(err).Msg("gharchive: failed writing response to cache")
 		return nil, err
 	}
+	l.Debug().Str("hour", hour.String()).Msg("gharchive: download complete")
 	c.maybeCleanup()
 	return rc, nil
 }
@@ -203,15 +269,22 @@ func (c *CachedFetcher) downloadAndStore(
 // writeResponseToCache saves body atomically and writes meta then returns a reader
 // When wrapNoHit is true the returned reader will not expose Name to callers
 func (c *CachedFetcher) writeResponseToCache(
+	ctx context.Context,
 	resp *http.Response,
 	path string,
 	metaPath string,
 	wrapNoHit bool,
 ) (io.ReadCloser, error) {
+	l := logger.C(ctx)
+
 	tmp := path + ".part"
 	defer func() {
-		if err := os.Remove(tmp); err != nil {
-			fmt.Fprintf(os.Stderr, "error closing file: %v\n", err)
+		if err := os.Remove(tmp); err != nil && !errors.Is(err, os.ErrNotExist) {
+			// best-effort cleanup; log as a warning if anything *other* than not-exist
+			logger.Named("gharchive").Debug().
+				Str("tmp", tmp).
+				Err(err).
+				Msg("gharchive: cache cleanup warning removing temp file")
 		}
 	}()
 
@@ -244,6 +317,13 @@ func (c *CachedFetcher) writeResponseToCache(
 	}
 	_ = saveMeta(metaPath, meta)
 
+	l.Debug().
+		Str("path", path).
+		Int64("size_bytes", n).
+		Str("etag", meta.ETag).
+		Str("last_modified", meta.LastModified).
+		Msg("gharchive: cached file written")
+
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -268,7 +348,10 @@ func loadMeta(path string) (*cacheMeta, error) {
 	}
 	defer func() {
 		if cerr := f.Close(); cerr != nil {
-			fmt.Fprintf(os.Stderr, "error closing file: %v\n", cerr)
+			logger.Named("gharchive").Debug().
+				Str("path", path).
+				Err(cerr).
+				Msg("gharchive: error closing meta file")
 		}
 	}()
 	var m cacheMeta
@@ -310,11 +393,16 @@ func (c *CachedFetcher) maybeCleanup() {
 	if !c.lastCleanupUnix.CompareAndSwap(last, now) {
 		return
 	}
-	_ = c.cleanupOnce()
+	if err := c.cleanupOnce(); err != nil {
+		logger.Named("gharchive").Debug().Err(err).Msg("gharchive: retention cleanup failed (ignored)")
+	}
 }
 
 // cleanupOnce applies age and size retention
 func (c *CachedFetcher) cleanupOnce() error {
+	l := logger.Named("gharchive").With().Logger()
+	start := time.Now()
+
 	entries, err := os.ReadDir(c.dir)
 	if err != nil {
 		return err
@@ -345,12 +433,14 @@ func (c *CachedFetcher) cleanupOnce() error {
 		if c.retainMaxAge > 0 && hr.Before(cutoff) {
 			_ = os.Remove(full)
 			_ = os.Remove(full + ".meta")
+			l.Debug().Str("path", full).Msg("gharchive: retention (age) removed file")
 			continue
 		}
 		items = append(items, item{Path: full, Size: fi.Size(), HourTS: hr})
 		total += fi.Size()
 	}
 
+	removed := int64(0)
 	if c.retainMaxBytes > 0 && total > c.retainMaxBytes {
 		sort.Slice(items, func(i, j int) bool { return items[i].HourTS.Before(items[j].HourTS) })
 		for _, it := range items {
@@ -360,8 +450,18 @@ func (c *CachedFetcher) cleanupOnce() error {
 			_ = os.Remove(it.Path)
 			_ = os.Remove(it.Path + ".meta")
 			total -= it.Size
+			removed += it.Size
+			l.Debug().Str("path", it.Path).Msg("gharchive: retention (size) removed file")
 		}
 	}
+
+	l.Debug().
+		Dur("took", time.Since(start)).
+		Int("files_scanned", len(entries)).
+		Int64("bytes_removed", removed).
+		Int64("bytes_remaining", total).
+		Msg("gharchive: retention cleanup complete")
+
 	return nil
 }
 

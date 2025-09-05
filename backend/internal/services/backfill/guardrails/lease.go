@@ -2,8 +2,6 @@ package guardrails
 
 import (
 	"context"
-	"crypto/sha1"
-	"encoding/binary"
 	"errors"
 	"time"
 
@@ -11,38 +9,45 @@ import (
 	"swearjar/internal/platform/store"
 )
 
-// MakeAdvisoryLease returns a function that wraps work in a tx-scoped advisory lock on hour.
-// If another worker holds the lock, it returns a benign error so the caller can retry/backoff
-func MakeAdvisoryLease(deps modkit.Deps) func(context.Context, time.Time, func(context.Context) error) error {
-	return func(ctx context.Context, hour time.Time, do func(context.Context) error) error {
-		key := advisoryKey(hour)
+// ErrLeaseHeld signals another worker owns the hour already.
+var ErrLeaseHeld = errors.New("backfill: hour lease already held")
 
-		return deps.PG.Tx(ctx, func(q store.RowQuerier) error {
-			// Try to acquire transaction-scoped advisory lock
-			rows, err := q.Query(ctx, `SELECT pg_try_advisory_xact_lock($1)`, key)
+// MakeAdvisoryLease returns a function that uses Postgres to
+// acquire an advisory lease for the given hour, running the do function
+// if successful. It uses the ingest_hours_leases table to track claimed hours.
+// If the hour is already claimed, it returns ErrLeaseHeld.
+// It does not attempt to release the lease; it's a one-time claim.
+// This is a simple way to avoid multiple workers processing the same hour
+// when running multiple backfill instances concurrently.
+// It assumes the ingest_hours_leases table exists.
+func MakeAdvisoryLease(
+	deps modkit.Deps,
+) func(ctx context.Context, hour time.Time, do func(context.Context) error) error {
+	return func(ctx context.Context, hour time.Time, do func(context.Context) error) error {
+		var claimed bool
+		err := deps.PG.Tx(ctx, func(q store.RowQuerier) error {
+			rows, err := q.Query(ctx, `
+				insert into ingest_hours_leases (hour_utc)
+				values ($1)
+				on conflict (hour_utc) do nothing
+				returning true
+			`, hour.UTC())
 			if err != nil {
 				return err
 			}
 			defer rows.Close()
-
-			var ok bool
 			if rows.Next() {
-				if err := rows.Scan(&ok); err != nil {
-					return err
-				}
+				claimed = true
 			}
-			if !ok {
-				// Another worker holds the lease; bubble a retryable-ish error
-				return errors.New("backfill: hour lease already held")
-			}
-
-			// We hold the lock for the duration of this transaction.
-			return do(ctx)
+			return nil
 		})
+		if err != nil {
+			return err
+		}
+		if !claimed {
+			return ErrLeaseHeld // clean skip
+		}
+		// We "own" the hour. Run the work, then we're done. (TODO: keep a status column)
+		return do(ctx)
 	}
-}
-
-func advisoryKey(t time.Time) int64 {
-	sum := sha1.Sum([]byte(t.UTC().Format(time.RFC3339)))
-	return int64(binary.BigEndian.Uint64(sum[:8]))
 }

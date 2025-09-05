@@ -13,6 +13,20 @@ type Input struct {
 	DryRun   bool
 }
 
+// WriteInput is the minimal per-utterance payload detect needs to compute & persist hits
+type WriteInput struct {
+	UtteranceID string
+	TextNorm    string
+
+	// denorm copied onto hits for hot filters
+	CreatedAt time.Time
+	Source    string // source_enum (as text)
+	RepoName  string
+	RepoHID   []byte
+	ActorHID  []byte
+	LangCode  *string
+}
+
 // Utterance is the minimal row we need to evaluate
 type Utterance struct {
 	ID             int64

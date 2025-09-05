@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"swearjar/internal/adapters/ingest/extract"
+	sjnorm "swearjar/internal/core/normalize"
 	"swearjar/internal/services/backfill/domain"
 )
 
@@ -17,21 +18,29 @@ func (extractor) FromEvent(env domain.EventEnvelope, n domain.Normalizer) []doma
 	out := make([]domain.Utterance, 0, len(us))
 	for i := range us {
 		u := us[i]
+
+		// Sanitize raw-ish fields before persisting
+		repo := sjnorm.Sanitize(u.Repo)
+		actor := sjnorm.Sanitize(u.Actor)
+		source := sjnorm.Sanitize(u.Source)          // mostly internal values, still safe to sanitize
+		sourceDet := sjnorm.Sanitize(u.SourceDetail) // may contain titles, paths, etc.
+		textRaw := sjnorm.Sanitize(u.TextRaw)        // critical: avoid NULLs in TEXT
+
 		out = append(out, domain.Utterance{
 			EventID:   u.EventID,
 			EventType: u.EventType,
 
-			Repo:    u.Repo,
-			RepoID:  env.Repo.ID, // <-- set from envelope
-			Actor:   u.Actor,
-			ActorID: env.Actor.ID, // <-- set from envelope
+			Repo:    repo,
+			RepoID:  env.Repo.ID,
+			Actor:   actor,
+			ActorID: env.Actor.ID,
 
 			CreatedAt:    u.CreatedAt,
-			Source:       u.Source,
-			SourceDetail: u.SourceDetail,
+			Source:       source,
+			SourceDetail: sourceDet,
 
-			TextRaw:        u.TextRaw,
-			TextNormalized: u.TextNormalized,
+			TextRaw:        textRaw,
+			TextNormalized: u.TextNormalized, // already sanitized via Normalizer.Normalize
 			LangCode:       u.LangCode,
 			Script:         u.Script,
 		})

@@ -73,23 +73,23 @@ func (r *queries) FinishHour(ctx context.Context, hour time.Time, fin domain.Hou
 // InsertUtterances inserts the given utterances, returning counts of inserted and deduped rows
 func (r *queries) InsertUtterances(ctx context.Context, us []domain.Utterance) (int, int, error) {
 	const sql = `
-        INSERT INTO utterances (
-            event_id, event_type,
-            repo_name, repo_id, repo_hid,
-            actor_login, actor_id, actor_hid, hid_key_version,
-            created_at,
-            source, source_detail, ordinal,
-            text_raw, text_normalized, lang_code, script
-        ) VALUES (
-            $1, $2,
-            $3, $4, $5,
-            $6, $7, $8, $9,
-            $10,
-            $11::source_enum, $12, $13,
-            $14, $15, $16, $17
-        )
-        ON CONFLICT (event_id, source, ordinal) DO NOTHING;
-    `
+		INSERT INTO utterances (
+				event_id, event_type,
+				repo_name, repo_id, repo_hid,
+				actor_login, actor_id, actor_hid, hid_key_version,
+				created_at,
+				source, source_detail, ordinal,
+				text_raw, text_normalized, lang_code, script
+		) VALUES (
+				$1, $2,
+				$3, $4, $5,
+				$6, $7, $8, $9,
+				$10,
+				$11::source_enum, $12, $13,
+				$14, $15, $16, $17
+		)
+		ON CONFLICT (event_id, source, ordinal) DO NOTHING;
+	`
 
 	attempts, inserted := 0, 0
 	type key struct{ event, source string }
@@ -134,4 +134,51 @@ func (r *queries) InsertUtterances(ctx context.Context, us []domain.Utterance) (
 		}
 	}
 	return inserted, attempts - inserted, nil
+}
+
+// LookupIDs resolves DB IDs for a set of (event_id, source, ordinal) keys.
+func (r *queries) LookupIDs(ctx context.Context, keys []domain.UKey) (map[domain.UKey]string, error) {
+	out := make(map[domain.UKey]string, len(keys))
+	if len(keys) == 0 {
+		return out, nil
+	}
+
+	evs := make([]string, 0, len(keys))
+	srcs := make([]string, 0, len(keys))
+	ords := make([]int, 0, len(keys))
+	for _, k := range keys {
+		evs = append(evs, k.EventID)
+		srcs = append(srcs, k.Source)
+		ords = append(ords, k.Ordinal)
+	}
+
+	const q = `
+		WITH k AS (
+			SELECT *
+			FROM UNNEST($1::text[], $2::source_enum[], $3::int[])
+					AS t(event_id, source, ordinal)
+		)
+		SELECT u.event_id, u.source::text, u.ordinal, u.id::text
+		FROM utterances u
+		JOIN k
+			ON u.event_id = k.event_id
+		AND u.source   = k.source
+		AND u.ordinal  = k.ordinal
+	`
+
+	rows, err := r.q.Query(ctx, q, evs, srcs, ords)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var ev, src, id string
+		var ord int
+		if err := rows.Scan(&ev, &src, &ord, &id); err != nil {
+			return nil, err
+		}
+		out[domain.UKey{EventID: ev, Source: src, Ordinal: ord}] = id
+	}
+	return out, rows.Err()
 }

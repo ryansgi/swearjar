@@ -242,3 +242,10 @@ VALUES
     '\x644080b9f56902cb95ce7f58dc6115d33819db135dbffbd1cc0f36f7bbcdcdc7'
   )
 ON CONFLICT (version) DO NOTHING;
+
+-- Table for ingest job leases.
+-- single row per hour, claimed_at is when the lease was taken
+CREATE TABLE ingest_hours_leases (
+  hour_utc timestamptz PRIMARY KEY,
+  claimed_at timestamptz NOT NULL DEFAULT NOW()
+);

@@ -14,6 +14,7 @@ import (
 // Ports exposed by the detect module
 type Ports struct {
 	Runner domain.RunnerPort
+	Writer domain.WriterPort
 }
 
 // Module implements modkit.Module
@@ -33,13 +34,11 @@ func New(deps modkit.Deps, overrides Options, opts ...modkit.Option) *Module {
 	if !ok {
 		panic("detect module: expected WithPorts(detect/domain.Ports)")
 	}
-
 	if ports.Utterances == nil || ports.HitsWriter == nil {
 		panic("detect module: Ports missing Utterances or HitsWriter")
 	}
 
 	// Merge config + overrides
-	// @Todo: improve config management
 	cfg := FromConfig(deps.Cfg)
 	if overrides.Version != 0 {
 		cfg.Version = overrides.Version
@@ -53,28 +52,40 @@ func New(deps modkit.Deps, overrides Options, opts ...modkit.Option) *Module {
 	if overrides.MaxRangeHours != 0 {
 		cfg.MaxRangeHours = overrides.MaxRangeHours
 	}
-
 	// bool override wins (defaults false if caller didn't set)
 	cfg.DryRun = overrides.DryRun
 
+	// Shared rulepack for the range runner
 	rp, err := rulepack.Load()
 	if err != nil {
 		panic(err)
 	}
 
-	svc := service.New(ports.Utterances, ports.HitsWriter, rp, service.Config{
-		Version:       cfg.Version,
-		Workers:       cfg.Workers,
-		PageSize:      cfg.PageSize,
-		MaxRangeHours: cfg.MaxRangeHours,
-		DryRun:        cfg.DryRun,
-	})
+	// Range runner (scan window over utterances and write hits)
+	runner := service.New(
+		ports.Utterances,
+		ports.HitsWriter,
+		rp,
+		service.Config{
+			Version:       cfg.Version,
+			Workers:       cfg.Workers,
+			PageSize:      cfg.PageSize,
+			MaxRangeHours: cfg.MaxRangeHours,
+			DryRun:        cfg.DryRun,
+		},
+	)
+
+	// Direct writer (per-utterance detection; used by backfill --detect and future live ingest)
+	writer := service.NewWriter(
+		ports.HitsWriter,
+		service.WriterConfig{Version: cfg.Version},
+	)
 
 	m := &Module{deps: deps}
-
-	// Export the interface directly so registry lookups are trivial
-	m.ports = Ports{Runner: svc}
-
+	m.ports = Ports{
+		Runner: runner,
+		Writer: writer,
+	}
 	return m
 }
 

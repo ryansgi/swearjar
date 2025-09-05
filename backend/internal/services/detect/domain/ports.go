@@ -31,3 +31,13 @@ type StorageRepo interface {
 	// Batch insert hits (idempotent for same version via ON CONFLICT)
 	WriteHitsBatch(ctx context.Context, xs []Hit) error
 }
+
+// WriterPort accepts utterances and writes hits.
+type WriterPort interface {
+	// Write processes a batch of normalized utterances and persists hits.
+	// Returns number of hits written (after ON CONFLICT DO NOTHING).
+	Write(ctx context.Context, xs []WriteInput) (int, error)
+
+	// WriteOne convenience wrapper.
+	WriteOne(ctx context.Context, x WriteInput) error
+}

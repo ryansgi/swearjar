@@ -135,28 +135,6 @@ func (s *Service) RunRange(ctx context.Context, start, end time.Time) error {
 	}
 }
 
-// mapSeverity coerces rulepack severities into the DB enum
-// @TODO: make DB enum match rulepack exactly
-func mapSeverity(n int) string {
-	if n <= 1 {
-		return "mild"
-	}
-	return "strong" // reserve "slur_masked" for a future specialized pack
-}
-
-// mapCategory coerces rulepack categories into the DB enum
-// @TODO: make DB enum match rulepack exactly
-func mapCategory(c string) string {
-	switch c {
-	case "bot_rage", "tooling_rage", "self_own", "generic":
-		return c
-	case "harassment":
-		return "generic"
-	default:
-		return "generic"
-	}
-}
-
 // strOrEmpty returns the string value or "" if nil
 // todo: move to strings package?
 func strOrEmpty(p *string) string {

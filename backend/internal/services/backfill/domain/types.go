@@ -18,6 +18,14 @@ func (h HourRef) UTC() time.Time {
 	return time.Date(h.Year, time.Month(h.Month), h.Day, h.Hour, 0, 0, 0, time.UTC)
 }
 
+// UKey uniquely identifies an utterance row by its natural key.
+// Matches the unique index ux_utterances_event_source_ord
+type UKey struct {
+	EventID string
+	Source  string // source_enum as text
+	Ordinal int
+}
+
 // HourFinish is a reference to a specific hour for a completed backfill hour
 type HourFinish struct {
 	Status            string

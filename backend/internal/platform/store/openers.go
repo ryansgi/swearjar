@@ -37,7 +37,7 @@ func openPG(ctx context.Context, cfg Config, s *Store) (TxRunner, error) {
 	backoff := backoffStart
 	for i := 0; i < maxAttempts; i++ {
 		toCtx, cancel := context.WithTimeout(ctx, pingTimeout)
-		lastErr = p.Pool.Ping(toCtx) // <-- no adapter, no SQL trace line
+		lastErr = p.Pool.Ping(toCtx) // no adapter, no SQL trace line
 		cancel()
 
 		if lastErr == nil {
