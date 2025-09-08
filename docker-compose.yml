@@ -41,7 +41,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-swearjar}
       PGPORT: ${POSTGRES_PORT:-5432}
     volumes:
-      - "./backend/docker/pgsql/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro"
+      - "./backend/docker/pgsql/00-create-users.sh:/docker-entrypoint-initdb.d/00-create-users.sh:ro"
+      - "./backend/docker/pgsql/init.sql:/docker-entrypoint-initdb.d/100-init.sql:ro"
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       test:
