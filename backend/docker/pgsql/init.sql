@@ -26,11 +26,13 @@ CREATE DOMAIN hid_bytes    AS bytea CHECK (octet_length(VALUE) = 32);
 
 -- WAL
 
-ALTER SYSTEM SET max_wal_size = '4GB';                 -- primary fix
+ALTER SYSTEM SET max_wal_size = '4GB';                 -- upper bound
 ALTER SYSTEM SET min_wal_size = '1GB';                 -- keeps segments around
 ALTER SYSTEM SET checkpoint_timeout = '15min';         -- time-based cap
 ALTER SYSTEM SET checkpoint_completion_target = 0.9;   -- spread I/O
-ALTER SYSTEM SET wal_compression = on;                 -- optional, CPU for less WAL
+ALTER SYSTEM SET wal_compression = on;                 -- CPU for less WAL
+
+ALTER SYSTEM SET deadlock_timeout = '200ms';
 
 SELECT pg_reload_conf();  -- no restart needed for these
 
@@ -123,11 +125,15 @@ CREATE TABLE repositories (
   fetched_at      timestamptz NOT NULL DEFAULT now(),
   next_refresh_at timestamptz,
   etag            text,
-  api_url         text
+  api_url         text,
+  gone_at         timestamptz,
+  gone_code       int2, -- e.g. 404, 410, 451
+  gone_reason     text
 );
 CREATE INDEX repositories_primary_lang_idx ON repositories (primary_lang);
 CREATE INDEX repositories_next_refresh_idx ON repositories (next_refresh_at);
 CREATE INDEX repositories_pushed_at_idx    ON repositories (pushed_at DESC);
+CREATE INDEX repositories_gone_idx         ON repositories (gone_at) WHERE gone_at IS NOT NULL;
 
 CREATE TABLE actors (
   actor_hid        hid_bytes  PRIMARY KEY REFERENCES principals_actors(actor_hid) ON DELETE CASCADE,
@@ -149,10 +155,14 @@ CREATE TABLE actors (
   fetched_at       timestamptz NOT NULL DEFAULT now(),
   next_refresh_at  timestamptz,
   etag             text,
-  api_url          text
+  api_url          text,
+  gone_at          timestamptz,
+  gone_code        int2, -- e.g. 404, 410, 451
+  gone_reason      text
 );
 CREATE UNIQUE INDEX actors_login_idx  ON actors (lower(login)) WHERE login IS NOT NULL;
 CREATE INDEX actors_next_refresh_idx  ON actors (next_refresh_at);
+CREATE INDEX actors_gone_idx ON actors (gone_at) WHERE gone_at IS NOT NULL;
 
 -- "Opt-in views" that surface public identifiers for those who consented
 CREATE VIEW active_allow_repos AS
@@ -419,22 +429,27 @@ $$;
 CREATE OR REPLACE FUNCTION ident.resolve_repo(p_hid hid_bytes, p_who text, p_purpose text)
 RETURNS bigint
 LANGUAGE plpgsql
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = ident, public
 AS $$
 DECLARE
   gh_id bigint;
   ok    boolean;
+  reason text;
 BEGIN
-  ok := can_expose_repo(p_hid);
+  ok := can_fetch_repo(p_hid);
   IF ok THEN
     SELECT gh_repo_id INTO gh_id FROM gh_repo_map WHERE repo_hid = p_hid;
+    reason := CASE WHEN gh_id IS NULL
+                   THEN 'allowed:no_optout,map_miss'
+                   ELSE 'allowed:no_optout'
+              END;
     INSERT INTO identity_resolve_audit (who, purpose, principal, principal_hid, allowed, reason)
-    VALUES (p_who, p_purpose, 'repo', p_hid, true, 'opt-in');
+    VALUES (p_who, p_purpose, 'repo', p_hid, true, reason);
     RETURN gh_id; -- may be NULL if not mapped yet
   ELSE
     INSERT INTO identity_resolve_audit (who, purpose, principal, principal_hid, allowed, reason)
-    VALUES (p_who, p_purpose, 'repo', p_hid, false, 'not allowed by consent');
+    VALUES (p_who, p_purpose, 'repo', p_hid, false, 'denied:optout_active');
     RETURN NULL;
   END IF;
 END $$;
@@ -442,22 +457,27 @@ END $$;
 CREATE OR REPLACE FUNCTION ident.resolve_actor(p_hid hid_bytes, p_who text, p_purpose text)
 RETURNS bigint
 LANGUAGE plpgsql
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = ident, public
 AS $$
 DECLARE
   gh_id bigint;
   ok    boolean;
+  reason text;
 BEGIN
-  ok := can_expose_actor(p_hid);
+  ok := can_fetch_actor(p_hid);
   IF ok THEN
     SELECT gh_user_id INTO gh_id FROM gh_actor_map WHERE actor_hid = p_hid;
+    reason := CASE WHEN gh_id IS NULL
+                   THEN 'allowed:no_optout,map_miss'
+                   ELSE 'allowed:no_optout'
+              END;
     INSERT INTO identity_resolve_audit (who, purpose, principal, principal_hid, allowed, reason)
-    VALUES (p_who, p_purpose, 'actor', p_hid, true, 'opt-in');
+    VALUES (p_who, p_purpose, 'actor', p_hid, true, reason);
     RETURN gh_id;
   ELSE
     INSERT INTO identity_resolve_audit (who, purpose, principal, principal_hid, allowed, reason)
-    VALUES (p_who, p_purpose, 'actor', p_hid, false, 'not allowed by consent');
+    VALUES (p_who, p_purpose, 'actor', p_hid, false, 'denied:optout_active');
     RETURN NULL;
   END IF;
 END $$;
@@ -466,7 +486,7 @@ END $$;
 CREATE OR REPLACE FUNCTION ident.repo_public(p_hid hid_bytes)
 RETURNS repositories
 LANGUAGE plpgsql
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = ident, public
 AS $$
 DECLARE rec repositories%ROWTYPE;
@@ -481,7 +501,7 @@ END $$;
 CREATE OR REPLACE FUNCTION ident.actor_public(p_hid hid_bytes)
 RETURNS actors
 LANGUAGE plpgsql
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = ident, public
 AS $$
 DECLARE rec actors%ROWTYPE;
@@ -541,6 +561,24 @@ RETURNS boolean LANGUAGE sql STABLE AS $$
   );
 $$;
 
+CREATE OR REPLACE FUNCTION can_fetch_repo(hid hid_bytes)
+RETURNS boolean LANGUAGE sql STABLE AS $$
+  SELECT NOT EXISTS (
+    SELECT 1 FROM consent_receipts r
+     WHERE r.principal='repo' AND r.principal_hid=$1
+       AND r.action='opt_out' AND r.state='active'
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION can_fetch_actor(hid hid_bytes)
+RETURNS boolean LANGUAGE sql STABLE AS $$
+  SELECT NOT EXISTS (
+    SELECT 1 FROM consent_receipts r
+     WHERE r.principal='actor' AND r.principal_hid=$1
+       AND r.action='opt_out' AND r.state='active'
+  );
+$$;
+
 -- Principals: add URL id + private explicit label + live label (no triggers)
 ALTER TABLE principals_repos
   ADD COLUMN hid_hex text
@@ -573,43 +611,143 @@ ALTER TABLE principals_repos ADD CONSTRAINT ck_repo_label_consent CHECK (_label_
 ALTER TABLE principals_actors ADD CONSTRAINT ck_actor_label_consent CHECK (_label_explicit IS NULL OR can_expose_actor(actor_hid));
 
 -- Indexes for API and search by label/hex
-CREATE UNIQUE INDEX IF NOT EXISTS principals_repos_hidhex_idx  ON principals_repos(hid_hex);
+CREATE UNIQUE INDEX IF NOT EXISTS principals_repos_hidhex_idx ON principals_repos(hid_hex);
 CREATE UNIQUE INDEX IF NOT EXISTS principals_actors_hidhex_idx ON principals_actors(hid_hex);
 CREATE INDEX IF NOT EXISTS principals_repos_label_ci_idx ON principals_repos(lower(label));
 CREATE INDEX IF NOT EXISTS principals_actors_label_ci_idx ON principals_actors(lower(label));
 
--- ROLES + PRIVILEGES
--- Broker-less: hallmonitor is the only invoker; API writes maps only
+--
+-- APP ROLE GRANTS
+-- sw_api: full RW on public; no direct table access in ident; can exec upsert shims
+-- sw_hallmonitor: full RW on public; SELECT in ident; can exec resolvers/public + shims
+--
+-- On PG18 ON CONFLICT DO NOTHING is treated as a read-revealing operation. We use a tiny SECURITY DEFINER upsert shim
+--
 
--- no implicit access; let app roles resolve names
-REVOKE ALL ON SCHEMA ident FROM PUBLIC;
-GRANT  USAGE ON SCHEMA ident TO sw_api, sw_hallmonitor;
+-- name resolution for ident
+GRANT USAGE ON SCHEMA ident TO sw_api, sw_hallmonitor;
 
--- API: insert-only into the maps (preflight); no reads
-REVOKE ALL ON ALL TABLES IN SCHEMA ident FROM PUBLIC, sw_api, sw_hallmonitor;
-GRANT INSERT ON ident.gh_repo_map, ident.gh_actor_map TO sw_api;
-
--- Hallmonitor: can read maps & audit, and append to audit (for resolver logging)
+-- ident tables: no direct access for sw_api; read-only for hallmonitor
+REVOKE ALL ON ALL TABLES IN SCHEMA ident FROM sw_api, sw_hallmonitor;
 GRANT SELECT ON ALL TABLES IN SCHEMA ident TO sw_hallmonitor;
-GRANT INSERT ON ident.identity_resolve_audit TO sw_hallmonitor;
 
--- IDENT functions: only hallmonitor may EXECUTE the resolvers/public helpers
+-- lock down ident functions (PUBLIC gets nothing)
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA ident FROM PUBLIC, sw_api, sw_hallmonitor;
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA ident TO sw_hallmonitor;
 
--- IDENT sequences (if any appear later)
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA ident TO sw_api, sw_hallmonitor;
+-- allow consent-gated resolvers/readers only to hallmonitor
+GRANT EXECUTE ON FUNCTION ident.resolve_repo(hid_bytes, text, text)  TO sw_hallmonitor;
+GRANT EXECUTE ON FUNCTION ident.resolve_actor(hid_bytes, text, text) TO sw_hallmonitor;
+GRANT EXECUTE ON FUNCTION ident.repo_public(hid_bytes) TO sw_hallmonitor;
+GRANT EXECUTE ON FUNCTION ident.actor_public(hid_bytes) TO sw_hallmonitor;
 
--- PUBLIC schema: both app roles can read all current/future tables/views
+-- public: both roles full RW + sequences + function execute
 GRANT USAGE ON SCHEMA public TO sw_api, sw_hallmonitor;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO sw_api, sw_hallmonitor;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO sw_api, sw_hallmonitor;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO sw_api, sw_hallmonitor;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO sw_api, sw_hallmonitor;
 
--- Default privileges for future objects created by the current owner
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO sw_api, sw_hallmonitor;
+-- defaults for future public objects (created by the role running this)
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO sw_api, sw_hallmonitor;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO sw_api, sw_hallmonitor;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO sw_api, sw_hallmonitor;
 
-ALTER DEFAULT PRIVILEGES IN SCHEMA ident GRANT INSERT ON TABLES TO sw_api;
-ALTER DEFAULT PRIVILEGES IN SCHEMA ident GRANT SELECT ON TABLES TO sw_hallmonitor;
-ALTER DEFAULT PRIVILEGES IN SCHEMA ident GRANT EXECUTE ON FUNCTIONS TO sw_hallmonitor;
-ALTER DEFAULT PRIVILEGES IN SCHEMA ident GRANT USAGE, SELECT ON SEQUENCES TO sw_api, sw_hallmonitor;
+-- owner must be a trusted role with full rights on ident.* (e.g., swearjarbot)
+CREATE OR REPLACE FUNCTION ident.upsert_gh_repo_map(p_hid hid_bytes, p_gh_id bigint)
+RETURNS void
+LANGUAGE sql SECURITY DEFINER
+SET search_path = ident, public
+AS $$
+  INSERT INTO gh_repo_map (repo_hid, gh_repo_id) VALUES (p_hid, p_gh_id) ON CONFLICT (repo_hid) DO NOTHING;
+$$;
+ALTER FUNCTION ident.upsert_gh_repo_map(hid_bytes, bigint) OWNER TO swearjarbot;
+REVOKE ALL ON FUNCTION ident.upsert_gh_repo_map(hid_bytes, bigint) FROM PUBLIC;
+
+CREATE OR REPLACE FUNCTION ident.upsert_gh_actor_map(p_hid hid_bytes, p_gh_id bigint)
+RETURNS void
+LANGUAGE sql SECURITY DEFINER
+SET search_path = ident, public
+AS $$
+  INSERT INTO gh_actor_map (actor_hid, gh_user_id) VALUES (p_hid, p_gh_id) ON CONFLICT (actor_hid) DO NOTHING;
+$$;
+ALTER FUNCTION ident.upsert_gh_actor_map(hid_bytes, bigint) OWNER TO swearjarbot;
+REVOKE ALL ON FUNCTION ident.upsert_gh_actor_map(hid_bytes, bigint) FROM PUBLIC;
+
+-- allow shims to both roles (insert via definer; no SELECT needed)
+GRANT EXECUTE ON FUNCTION ident.upsert_gh_repo_map(hid_bytes, bigint)  TO sw_api, sw_hallmonitor;
+GRANT EXECUTE ON FUNCTION ident.upsert_gh_actor_map(hid_bytes, bigint) TO sw_api, sw_hallmonitor;
+
+-- Create a "broker" role for cross-service access to consent-gated functions + tables
+-- This role should not be directly logged into
+DO $$BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='broker') THEN
+    CREATE ROLE broker NOLOGIN;
+  END IF;
+END$$;
+
+-- Make sure the consent-gated functions are owned by broker
+ALTER FUNCTION ident.resolve_repo(hid_bytes, text, text)  OWNER TO broker;
+ALTER FUNCTION ident.resolve_actor(hid_bytes, text, text) OWNER TO broker;
+ALTER FUNCTION ident.repo_public(hid_bytes) OWNER TO broker;
+ALTER FUNCTION ident.actor_public(hid_bytes) OWNER TO broker;
+
+-- Broker needs schema visibility
+GRANT USAGE ON SCHEMA ident  TO broker;
+GRANT USAGE ON SCHEMA public TO broker;
+
+-- Minimal table privileges needed BY the SECDEF bodies
+GRANT INSERT ON ident.identity_resolve_audit TO broker;
+GRANT SELECT ON ident.gh_repo_map, ident.gh_actor_map TO broker;
+GRANT SELECT ON public.consent_receipts TO broker;
+GRANT SELECT ON public.repositories, public.actors TO broker;
+
+
+CREATE OR REPLACE FUNCTION ident.bulk_upsert_gh_repo_map(p_hex text[], p_ids bigint[])
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = ident, public
+AS $$
+  WITH data AS (
+    SELECT decode(x,'hex')::hid_bytes AS hid, i::bigint AS id
+    FROM unnest(p_hex, p_ids) AS t(x,i)
+  ),
+  missing AS (
+    SELECT d.hid, d.id
+    FROM data d
+    LEFT JOIN gh_repo_map g ON g.repo_hid = d.hid
+    WHERE g.repo_hid IS NULL
+  )
+  INSERT INTO gh_repo_map (repo_hid, gh_repo_id)
+  SELECT hid, id FROM missing
+  ON CONFLICT (repo_hid) DO NOTHING;
+$$;
+ALTER FUNCTION ident.bulk_upsert_gh_repo_map(text[], bigint[]) OWNER TO broker;
+REVOKE ALL ON FUNCTION ident.bulk_upsert_gh_repo_map(text[], bigint[]) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION ident.bulk_upsert_gh_repo_map(text[], bigint[]) TO sw_api, sw_hallmonitor;
+
+CREATE OR REPLACE FUNCTION ident.bulk_upsert_gh_actor_map(p_hex text[], p_ids bigint[])
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = ident, public
+AS $$
+  WITH data AS (
+    SELECT decode(x,'hex')::hid_bytes AS hid, i::bigint AS id
+    FROM unnest(p_hex, p_ids) AS t(x,i)
+  ),
+  missing AS (
+    SELECT d.hid, d.id
+    FROM data d
+    LEFT JOIN gh_actor_map g ON g.actor_hid = d.hid
+    WHERE g.actor_hid IS NULL
+  )
+  INSERT INTO gh_actor_map (actor_hid, gh_user_id)
+  SELECT hid, id FROM missing
+  ON CONFLICT (actor_hid) DO NOTHING;
+$$;
+ALTER FUNCTION ident.bulk_upsert_gh_actor_map(text[], bigint[]) OWNER TO broker;
+REVOKE ALL ON FUNCTION ident.bulk_upsert_gh_actor_map(text[], bigint[]) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION ident.bulk_upsert_gh_actor_map(text[], bigint[]) TO sw_api, sw_hallmonitor;
+
+GRANT INSERT, SELECT ON ident.gh_repo_map  TO broker;
+GRANT INSERT, SELECT ON ident.gh_actor_map TO broker;
