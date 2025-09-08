@@ -45,19 +45,22 @@ func (s *pg) WriteBatch(ctx context.Context, xs []domain.HitWrite) error {
 	var sb strings.Builder
 	sb.WriteString(`INSERT INTO hits
 		(utterance_id, created_at, term, category, severity, span_start, span_end,
-		detector_version, source, repo_name, repo_hid, actor_hid, lang_code) VALUES `)
+		detector_version, source, repo_hid, actor_hid, lang_code) VALUES `)
 
-	args := make([]any, 0, len(xs)*13)
+	args := make([]any, 0, len(xs)*12)
 	for i, h := range xs {
 		if i > 0 {
 			sb.WriteByte(',')
 		}
-		base := i*13 + 1
-		fmt.Fprintf(&sb, "($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)",
-			base, base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9, base+10, base+11, base+12)
+		base := i*12 + 1
+		fmt.Fprintf(&sb, "($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)",
+			base, base+1, base+2, base+3, base+4, base+5,
+			base+6, base+7, base+8, base+9, base+10, base+11)
+
 		args = append(args,
-			h.UtteranceID, h.CreatedAt, h.Term, h.Category, h.Severity, h.SpanStart, h.SpanEnd, h.DetectorVersion,
-			h.Source, h.RepoName, h.RepoHID, h.ActorHID, h.LangCode,
+			h.UtteranceID, h.CreatedAt, h.Term, h.Category, h.Severity,
+			h.SpanStart, h.SpanEnd, h.DetectorVersion, h.Source,
+			h.RepoHID, h.ActorHID, h.LangCode,
 		)
 	}
 	// Idempotent for same detector_version & span
@@ -242,12 +245,12 @@ func (s *pg) AggByCategory(ctx context.Context, w domain.Window, f domain.Filter
 	arg := func(v any) string { args = append(args, v); return fmt.Sprintf("$%d", len(args)) }
 
 	sb.WriteString(`
-		SELECT h.category::text, h.severity::text, COUNT(*) AS hits
-		FROM hits h
-		JOIN utterances u ON u.id = h.utterance_id
-		WHERE u.created_at >= ` + arg(w.Since) + ` AND u.created_at < ` + arg(w.Until) + `
-			AND NOT EXISTS (SELECT 1 FROM active_deny_repos r WHERE r.principal_hid = u.repo_hid)
-			AND NOT EXISTS (SELECT 1 FROM active_deny_actors a WHERE a.principal_hid = u.actor_hid)
+	SELECT h.category::text, h.severity::text, COUNT(*) AS hits
+	FROM hits h
+	JOIN utterances u ON u.id = h.utterance_id
+	WHERE u.created_at >= ` + arg(w.Since) + ` AND u.created_at < ` + arg(w.Until) + `
+		AND NOT EXISTS (SELECT 1 FROM active_deny_repos r WHERE r.principal_hid = u.repo_hid)
+		AND NOT EXISTS (SELECT 1 FROM active_deny_actors a WHERE a.principal_hid = u.actor_hid)
 	`)
 	if f.Category != "" {
 		sb.WriteString("  AND h.category = " + arg(f.Category) + "::hit_category_enum\n")
