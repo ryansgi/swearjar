@@ -55,6 +55,7 @@ func serveDocJSON() http.HandlerFunc {
 
 		ensureErrorResponseDefinition(spec)
 		addDefaultError(spec)
+		addDefaultBadRequest(spec)
 
 		for _, m := range mutators {
 			m(spec)
@@ -113,23 +114,11 @@ func ensureErrorResponseDefinition(spec map[string]any) {
 		"type":        "object",
 		"description": "Standard error response",
 		"properties": map[string]any{
-			"status_code": map[string]any{
-				"type":    "integer",
-				"format":  "int32",
-				"example": 500,
-			},
-			"status": map[string]any{
-				"type":    "string",
-				"example": "Internal Server Error",
-			},
-			"error": map[string]any{
-				"type":    "string",
-				"example": "panic recovered",
-			},
-			"request_id": map[string]any{
-				"type":    "string",
-				"example": "579f33bf50b1/abc-000001",
-			},
+			"status_code": map[string]any{"type": "integer", "format": "int32"},
+			"status":      map[string]any{"type": "string"},
+			"code":        map[string]any{"type": "integer", "format": "int32"},
+			"error":       map[string]any{"type": "string"},
+			"request_id":  map[string]any{"type": "string"},
 		},
 		"required": []any{"status_code", "status"},
 	}
@@ -146,8 +135,13 @@ func addDefaultError(spec map[string]any) {
 		"description": "Internal Server Error",
 		"content": map[string]any{
 			"application/json": map[string]any{
-				"schema": map[string]any{
-					"$ref": "#/components/schemas/ErrorResponse",
+				"schema": map[string]any{"$ref": "#/components/schemas/ErrorResponse"},
+				"example": map[string]any{
+					"status_code": 500,
+					"status":      "Internal Server Error",
+					"code":        1,
+					"error":       "panic recovered",
+					"request_id":  "579f33bf50b1/abc-000001",
 				},
 			},
 		},
@@ -169,6 +163,49 @@ func addDefaultError(spec map[string]any) {
 			}
 			if _, exists := responses["500"]; !exists {
 				responses["500"] = errResp
+			}
+		}
+	}
+}
+
+// 400 with a 400-ish example (matches your binder output)
+func addDefaultBadRequest(spec map[string]any) {
+	paths, ok := spec["paths"].(map[string]any)
+	if !ok {
+		return
+	}
+	br := map[string]any{
+		"description": "Bad Request",
+		"content": map[string]any{
+			"application/json": map[string]any{
+				"schema": map[string]any{"$ref": "#/components/schemas/ErrorResponse"},
+				"example": map[string]any{
+					"status_code": 400,
+					"status":      "Bad Request",
+					"code":        8,
+					"error":       "field must be one of [foo bar baz]",
+					"request_id":  "579f33bf50b1/abc-000001",
+				},
+			},
+		},
+	}
+	for _, p := range paths {
+		node, ok := p.(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, opAny := range node {
+			op, ok := opAny.(map[string]any)
+			if !ok {
+				continue
+			}
+			resps, ok := op["responses"].(map[string]any)
+			if !ok {
+				resps = map[string]any{}
+				op["responses"] = resps
+			}
+			if _, exists := resps["400"]; !exists {
+				resps["400"] = br
 			}
 		}
 	}

@@ -3,10 +3,10 @@
 package httpkit
 
 import (
-	"encoding/json"
 	"net/http"
 
 	phttp "swearjar/internal/platform/net/http"
+	"swearjar/internal/platform/net/http/bind"
 )
 
 type (
@@ -48,12 +48,10 @@ func List(items any, total, page, size int, cursor string) Response {
 
 // JSON wraps a JSON handler with the appropriate content type
 func JSON[T any](fn func(*http.Request, T) (any, error)) Handler {
-	return Handle(func(r *http.Request) Response {
-		var in T
-		dec := json.NewDecoder(r.Body)
-		dec.DisallowUnknownFields()
-		if err := dec.Decode(&in); err != nil {
-			return phttp.Error(err)
+	return phttp.Handle(func(r *http.Request) phttp.Response {
+		in, err := bind.ParseJSON[T](r)
+		if err != nil {
+			return phttp.Error(err) // maps to 400 with translated message
 		}
 		out, err := fn(r, in)
 		if err != nil {
