@@ -56,10 +56,10 @@ func main() {
 	st, err := store.Open(context.Background(), store.Config{
 		PG: store.PGConfig{
 			Enabled:     true,
-			URL:         dbCfg.MustString("DBURL"),
+			URL:         dbCfg.MustString("DBURL_HM"),
 			MaxConns:    int32(dbCfg.MayInt("MAX_CONNS", 4)),
 			SlowQueryMs: dbCfg.MayInt("SLOW_MS", 500),
-			LogSQL:      dbCfg.MayBool("LOG_SQL", true),
+			LogSQL:      dbCfg.MayBool("LOG_SQL", false),
 		},
 	}, store.WithLogger(*l))
 	if err != nil {

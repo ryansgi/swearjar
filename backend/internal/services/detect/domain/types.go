@@ -17,11 +17,9 @@ type Input struct {
 type WriteInput struct {
 	UtteranceID string
 	TextNorm    string
-
 	// denorm copied onto hits for hot filters
 	CreatedAt time.Time
 	Source    string // source_enum (as text)
-	RepoName  string
 	RepoHID   []byte
 	ActorHID  []byte
 	LangCode  *string
@@ -33,6 +31,7 @@ type Utterance struct {
 	TextNormalized string // may be empty
 	TextRaw        string // used to compute norm if TextNorm empty
 	CommittedAt    time.Time
+	LangCode       *string
 }
 
 // Hit is the row we persist
@@ -44,4 +43,5 @@ type Hit struct {
 	StartOffset     int
 	EndOffset       int
 	DetectorVersion int
+	LangCode        *string
 }

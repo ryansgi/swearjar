@@ -28,6 +28,10 @@ type RefresherPort interface {
 type SignalsPort interface {
 	SeenRepo(ctx context.Context, repoID int64, fullName string, seenAt time.Time) error
 	SeenActor(ctx context.Context, actorID int64, login string, seenAt time.Time) error
+
+	// optional ergonomics
+	SeenRepoHID(ctx context.Context, repoHID []byte, seenAt time.Time) error
+	SeenActorHID(ctx context.Context, actorHID []byte, seenAt time.Time) error
 }
 
 // Read-side helpers

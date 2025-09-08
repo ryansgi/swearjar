@@ -7,14 +7,12 @@ import (
 	"time"
 )
 
-// RepoCadenceInputs returns stars and pushed_at for a repo if present
 func (r *queries) RepoCadenceInputs(ctx context.Context, repoID int64) (int, *time.Time, error) {
-	const sqlq = `
-		SELECT stars, pushed_at
-		FROM repositories
-		WHERE repo_id = $1
-	`
-	row := r.q.QueryRow(ctx, sqlq, repoID)
+	return r.RepoCadenceInputsHID(ctx, makeRepoHID(repoID))
+}
+
+func (r *queries) RepoCadenceInputsHID(ctx context.Context, repoHID []byte) (int, *time.Time, error) {
+	row := r.q.QueryRow(ctx, `SELECT stars, pushed_at FROM repositories WHERE repo_hid = $1`, repoHID)
 	var stars sql.NullInt64
 	var pushed sql.NullTime
 	if err := row.Scan(&stars, &pushed); err != nil {
@@ -30,14 +28,12 @@ func (r *queries) RepoCadenceInputs(ctx context.Context, repoID int64) (int, *ti
 	return int(stars.Int64), pt, nil
 }
 
-// ActorCadenceInputs returns followers for an actor if present
 func (r *queries) ActorCadenceInputs(ctx context.Context, actorID int64) (int, error) {
-	const sqlq = `
-		SELECT followers
-		FROM actors
-		WHERE actor_id = $1
-	`
-	row := r.q.QueryRow(ctx, sqlq, actorID)
+	return r.ActorCadenceInputsHID(ctx, makeActorHID(actorID))
+}
+
+func (r *queries) ActorCadenceInputsHID(ctx context.Context, actorHID []byte) (int, error) {
+	row := r.q.QueryRow(ctx, `SELECT followers FROM actors WHERE actor_hid = $1`, actorHID)
 	var followers sql.NullInt64
 	if err := row.Scan(&followers); err != nil {
 		if err == sql.ErrNoRows {

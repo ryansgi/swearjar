@@ -52,6 +52,12 @@ const (
 
 	// ErrorCodeDB is for general database errors
 	ErrorCodeDB
+
+	// ErrorCodeGone represents resources explicitly marked as gone (HTTP 410)
+	ErrorCodeGone
+
+	// ErrorCodeLegal represents legal/DMCA style blocks (HTTP 451)
+	ErrorCodeLegal
 )
 
 // HTTPStatusCode turns an ErrorCode into an http status code
@@ -75,6 +81,11 @@ func HTTPStatusCode(c ErrorCode) int {
 		return http.StatusServiceUnavailable
 	case ErrorCodeDB, ErrorCodePanic, ErrorCodeUnknown:
 		return http.StatusInternalServerError
+	case ErrorCodeGone:
+		return http.StatusGone // 410
+	case ErrorCodeLegal:
+		return http.StatusUnavailableForLegalReasons // 451
+
 	default:
 		return http.StatusInternalServerError
 	}
@@ -164,7 +175,21 @@ func CodeOf(err error) ErrorCode {
 func IsCode(err error, code ErrorCode) bool { return CodeOf(err) == code }
 
 // HTTPStatus returns the mapped HTTP status for any error
-func HTTPStatus(err error) int { return HTTPStatusCode(CodeOf(err)) }
+// If the error implements HTTPStatus() int, that wins.
+func HTTPStatus(err error) int {
+	if err == nil {
+		return http.StatusOK
+	}
+	// If a wrapped error exposes an HTTP status directly, use it.
+	type httpStatusProvider interface{ HTTPStatus() int }
+	var hsp httpStatusProvider
+	if stderrs.As(err, &hsp) {
+		if s := hsp.HTTPStatus(); s != 0 {
+			return s
+		}
+	}
+	return HTTPStatusCode(CodeOf(err))
+}
 
 // As unwraps and returns (*Error, true) if err is one of ours
 func As(err error) (*Error, bool) {

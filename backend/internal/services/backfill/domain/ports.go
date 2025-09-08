@@ -19,12 +19,27 @@ type StorageRepo interface {
 	// FinishHour marks the end of a backfill hour
 	FinishHour(ctx context.Context, hour time.Time, fin HourFinish) error
 
-	// InsertUtterances inserts a batch of utterances into the storage
+	// EnsurePrincipalsAndMaps ensures principals and mapping rows for the given HIDs.
+	// The maps are from HID ([32]byte) to internal numeric ID (int64)
+	// It is safe to call with empty maps (no-ops)
+	// It is safe to call concurrently (with different maps)
+	// It is recommended to limit concurrency to avoid DB overload
+	EnsurePrincipalsAndMaps(ctx context.Context, repos map[[32]byte]int64, actors map[[32]byte]int64) error
+
+	// InsertUtterances inserts utterances in bulk, returning counts of inserted and deduped rows.
+	// It is safe to call with an empty slice (no-op)
+	// It is recommended to batch inserts (e.g. 1000s of rows) for performance
 	InsertUtterances(ctx context.Context, us []Utterance) (inserted, deduped int, err error)
 
 	// LookupIDs resolves DB UUIDs (as text) for the given natural keys.
 	// The result is a map from UKey -> utterances.id::text
-	LookupIDs(ctx context.Context, keys []UKey) (map[UKey]string, error)
+	LookupIDs(ctx context.Context, keys []UKey) (map[UKey]LookupRow, error)
+}
+
+// LookupRow is what LookupIDs returns per natural key
+type LookupRow struct {
+	ID       string  // utterances.id::text
+	LangCode *string // utterances.lang_code (nil if NULL)
 }
 
 // Fetcher is the data fetcher interface

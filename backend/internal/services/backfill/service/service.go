@@ -3,9 +3,11 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"io"
 	"math/rand"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -49,6 +51,9 @@ type Config struct {
 
 	// Detection toggle: if true, run detector writer after inserts
 	DetectEnabled bool
+
+	// PrincipalsConcurrency limits concurrent EnsurePrincipalsAndMaps calls; <=0 -> 2
+	PrincipalsConcurrency int
 }
 
 // Service implements the backfill service
@@ -66,6 +71,8 @@ type Service struct {
 
 	// Lease(ctx, hourUTC, do) should take an hour-scoped advisory lock and run do()
 	Lease func(ctx context.Context, hour time.Time, do func(context.Context) error) error
+
+	principalsSem chan struct{}
 }
 
 // New constructs the backfill service
@@ -80,6 +87,11 @@ func New(
 	lease func(context.Context, time.Time, func(context.Context) error) error,
 	detectWriter detectdom.WriterPort, // optional detect writer
 ) *Service {
+	ps := cfg.PrincipalsConcurrency
+	if ps <= 0 {
+		ps = 2
+	}
+
 	if db == nil {
 		panic("backfill.Service requires a non nil TxRunner")
 	}
@@ -89,9 +101,10 @@ func New(
 	return &Service{
 		DB: db, Binder: binder,
 		Fetch: f, Reader: rf, Extract: ex, Norm: n,
-		Cfg:    cfg,
-		Detect: detectWriter,
-		Lease:  lease,
+		Cfg:           cfg,
+		Detect:        detectWriter,
+		Lease:         lease,
+		principalsSem: make(chan struct{}, ps),
 	}
 }
 
@@ -165,7 +178,7 @@ func (s *Service) runHourWithRetry(ctx context.Context, hr domain.HourRef) error
 	}
 
 	var last error
-	for i := 0; i < attempts; i++ {
+	for i := range attempts {
 		err := s.runHour(ctx, hr)
 		if err == nil {
 			return nil
@@ -232,7 +245,7 @@ func (s *Service) runHourUnlocked(ctx context.Context, hr domain.HourRef) (retEr
 	{
 		dbCtx, dbCancel := guardrails.ForDB(hrCtx, tos)
 		_ = s.DB.Tx(dbCtx, func(q repokit.Queryer) error {
-			applyTxTuning(ctx, q, false)
+			applyTxTuning(ctx, q)
 			return s.Binder.Bind(q).StartHour(dbCtx, hourUTC)
 		})
 		dbCancel()
@@ -246,7 +259,7 @@ func (s *Service) runHourUnlocked(ctx context.Context, hr domain.HourRef) (retEr
 		}
 		dbCtx, dbCancel := guardrails.ForDB(hrCtx, tos)
 		_ = s.DB.Tx(dbCtx, func(q repokit.Queryer) error {
-			applyTxTuning(ctx, q, false)
+			applyTxTuning(ctx, q)
 			return s.Binder.Bind(q).FinishHour(dbCtx, hourUTC, domain.HourFinish{
 				Status:            map[bool]string{true: "error", false: "ok"}[retErr != nil],
 				CacheHit:          cacheHit,
@@ -371,7 +384,7 @@ func (s *Service) runHourUnlocked(ctx context.Context, hr domain.HourRef) (retEr
 			})
 		}
 
-		var idMap map[domain.UKey]string
+		var idMap map[domain.UKey]domain.LookupRow
 		if err := s.DB.Tx(hrCtx, func(q repokit.Queryer) error {
 			var e error
 			idMap, e = s.Binder.Bind(q).LookupIDs(hrCtx, keys)
@@ -381,33 +394,23 @@ func (s *Service) runHourUnlocked(ctx context.Context, hr domain.HourRef) (retEr
 			return
 		}
 
-		buildLangPtr := func(s string) *string {
-			if s == "" {
-				return nil
-			}
-			v := s
-			return &v
-		}
 		wbatch := make([]detectdom.WriteInput, 0, len(all))
 		for i, u := range all {
 			k := keys[i]
-			uid := idMap[k]
-			if uid == "" || u.TextNormalized == "" {
+			got := idMap[k]
+			if got.ID == "" || u.TextNormalized == "" {
 				continue
 			}
 			wbatch = append(wbatch, detectdom.WriteInput{
-				UtteranceID: uid,
+				UtteranceID: got.ID,
 				TextNorm:    u.TextNormalized,
-
-				// denorms for hot filters / correct created_at
-				CreatedAt: u.CreatedAt,
-				Source:    u.Source, // coarse()'d above
-				RepoName:  u.Repo,
-				// RepoHID / ActorHID can be added here if your extractor populates them
-				LangCode: buildLangPtr(u.LangCode),
+				CreatedAt:   u.CreatedAt,
+				Source:      u.Source,
+				RepoHID:     hidRepo(u.RepoID),
+				ActorHID:    hidActor(u.ActorID),
+				LangCode:    got.LangCode, // <-- from DB (trigger-populated)
 			})
 		}
-
 		if len(wbatch) > 0 {
 			wchunk := chunk
 			if wchunk <= 0 {
@@ -442,14 +445,41 @@ func (s *Service) insertBatchRobust(ctx context.Context, batch []domain.Utteranc
 
 	tryOnce := func(c context.Context, xs []domain.Utterance) (int, int, error) {
 		var ins, dd int
+
+		// Build HID sets for this batch
+		seenRepo, seenActor := map[[32]byte]int64{}, map[[32]byte]int64{}
+		for _, u := range xs {
+			if u.RepoID == 0 || u.ActorID == 0 {
+				continue
+			}
+			var rk, ak [32]byte
+			copy(rk[:], hidRepo(u.RepoID))
+			copy(ak[:], hidActor(u.ActorID))
+			if _, ok := seenRepo[rk]; !ok {
+				seenRepo[rk] = u.RepoID
+			}
+			if _, ok := seenActor[ak]; !ok {
+				seenActor[ak] = u.ActorID
+			}
+		}
+
+		// Short Tx: principals + maps (throttled), NO lock_timeout
+		if len(seenRepo) > 0 || len(seenActor) > 0 {
+			s.principalsSem <- struct{}{}
+			err := s.DB.Tx(c, func(q repokit.Queryer) error {
+				return s.Binder.Bind(q).EnsurePrincipalsAndMaps(c, seenRepo, seenActor)
+			})
+			<-s.principalsSem
+			if err != nil {
+				return 0, 0, err
+			}
+		}
+
+		// Main Tx: utterances only
 		dbCtx, dbCancel := guardrails.ForDB(c, guardrails.Timeouts{})
 		defer dbCancel()
-
 		err := s.DB.Tx(dbCtx, func(q repokit.Queryer) error {
-			// Session tuning: no server-side statement timeouts, quicker deadlock detect,
-			// bounded lock waits. Avoid changing the transaction isolation here.
-			applyTxTuning(ctx, q, true)
-
+			applyTxTuning(c, q)
 			i, d, e := s.Binder.Bind(q).InsertUtterances(dbCtx, xs)
 			if e == nil {
 				ins, dd = i, d
@@ -543,16 +573,25 @@ func sleepCtx(ctx context.Context, d time.Duration) error {
 }
 
 // SET LOCAL only lives for the duration of the current transaction
-func applyTxTuning(ctx context.Context, q repokit.Queryer, heavy bool) {
+func applyTxTuning(ctx context.Context, q repokit.Queryer) {
 	_, _ = q.Exec(ctx, "SET LOCAL statement_timeout = 0")
-	_, _ = q.Exec(ctx, "SET LOCAL idle_in_transaction_session_timeout = 0")
-	if heavy {
-		_, _ = q.Exec(ctx, "SET LOCAL deadlock_timeout = '200ms'")
-		_, _ = q.Exec(ctx, "SET LOCAL lock_timeout = '5s'")
-	}
+
+	// May no longer be needed
+	//_, _ = q.Exec(ctx, "SET LOCAL idle_in_transaction_session_timeout = 0")
 }
 
 // treat "hour lease already held" as a contention signal
 func isLeaseHeld(err error) bool {
 	return errors.Is(err, guardrails.ErrLeaseHeld)
+}
+
+// hid helpers (privacy-first; one-way)
+func hidRepo(id int64) []byte {
+	h := sha256.Sum256([]byte("repo:" + strconv.FormatInt(id, 10)))
+	return h[:]
+}
+
+func hidActor(id int64) []byte {
+	h := sha256.Sum256([]byte("actor:" + strconv.FormatInt(id, 10)))
+	return h[:]
 }

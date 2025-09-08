@@ -5,6 +5,7 @@ import (
 
 	"swearjar/internal/core/detector"
 	"swearjar/internal/core/rulepack"
+	str "swearjar/internal/platform/strings"
 	dom "swearjar/internal/services/detect/domain"
 	hitsdom "swearjar/internal/services/hits/domain"
 )
@@ -43,12 +44,6 @@ func (s *WriterService) Write(ctx context.Context, xs []dom.WriteInput) (int, er
 			continue
 		}
 
-		// SAFE: lang may be nil
-		lang := ""
-		if u.LangCode != nil {
-			lang = *u.LangCode
-		}
-
 		matches := s.det.Scan(u.TextNorm)
 		for _, m := range matches {
 			cat := mapCategory(m.Category)
@@ -64,10 +59,9 @@ func (s *WriterService) Write(ctx context.Context, xs []dom.WriteInput) (int, er
 					DetectorVersion: s.cfg.Version,
 					CreatedAt:       u.CreatedAt.UTC(),
 					Source:          u.Source,
-					RepoName:        u.RepoName,
 					RepoHID:         u.RepoHID,
 					ActorHID:        u.ActorHID,
-					LangCode:        lang,
+					LangCode:        str.Deref(u.LangCode),
 				})
 			}
 		}

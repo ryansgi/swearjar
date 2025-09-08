@@ -9,6 +9,7 @@ import (
 
 	"swearjar/internal/core/detector"
 	"swearjar/internal/core/rulepack"
+	str "swearjar/internal/platform/strings"
 	hitsdom "swearjar/internal/services/hits/domain"
 	utdom "swearjar/internal/services/utterances/domain"
 )
@@ -107,10 +108,9 @@ func (s *Service) RunRange(ctx context.Context, start, end time.Time) error {
 							SpanEnd:         sp[1],
 							DetectorVersion: s.Cfg.Version,
 							Source:          u.Source,
-							RepoName:        u.RepoName,
 							RepoHID:         u.RepoHID,
 							ActorHID:        u.ActorHID,
-							LangCode:        strOrEmpty(u.LangCode),
+							LangCode:        str.Deref(u.LangCode),
 						})
 					}
 				}
@@ -133,13 +133,4 @@ func (s *Service) RunRange(ctx context.Context, start, end time.Time) error {
 
 		after = next
 	}
-}
-
-// strOrEmpty returns the string value or "" if nil
-// todo: move to strings package?
-func strOrEmpty(p *string) string {
-	if p == nil {
-		return ""
-	}
-	return *p
 }

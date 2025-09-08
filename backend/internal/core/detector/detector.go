@@ -51,7 +51,7 @@ func (d *Detector) Scan(norm string) []Hit {
 		return hits
 	}
 
-	// 1) Templates (regex). Emit one hit per match with the matched text as term.
+	// Templates (regex). Emit one hit per match with the matched text as term.
 	for i, re := range d.p.Compiled {
 		idxs := re.FindAllStringIndex(norm, -1)
 		if len(idxs) == 0 {
@@ -70,7 +70,7 @@ func (d *Detector) Scan(norm string) []Hit {
 		}
 	}
 
-	// 2) Lemmas (multi-substring search with conservative boundaries).
+	// Lemmas (multi-substring search with conservative boundaries).
 	// We avoid heavy deps initially; can swap to AC later under this loop.
 	for _, lm := range d.p.Lemmas {
 		needle := lm.Term
@@ -97,7 +97,7 @@ func (d *Detector) Scan(norm string) []Hit {
 		}
 	}
 
-	// 3) Merge identical hits (term+category+severity+source)
+	// Merge identical hits (term+category+severity+source)
 	return mergeHits(hits)
 }
 

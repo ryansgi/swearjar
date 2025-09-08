@@ -45,10 +45,10 @@ type HourFinish struct {
 // Utterance is a single utterance extracted from an event
 type Utterance struct {
 	EventID, EventType, Repo, Actor string
-	RepoID, ActorID                 int64
+	RepoID, ActorID                 int64 // used only to derive HIDs; not persisted
 	CreatedAt                       time.Time
 	Source, SourceDetail            string
 	Ordinal                         int
 	TextRaw, TextNormalized         string
-	LangCode, Script                string
+	LangCode                        *string
 }

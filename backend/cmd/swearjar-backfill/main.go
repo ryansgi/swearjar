@@ -31,7 +31,6 @@ func main() {
 	dbCfg := root.Prefix("SERVICE_PGSQL_")
 
 	l := logger.Get()
-
 	st, err := store.Open(context.Background(), store.Config{
 		PG: store.PGConfig{
 			Enabled:     true,

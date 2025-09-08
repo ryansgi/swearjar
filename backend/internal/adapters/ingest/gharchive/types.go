@@ -57,51 +57,52 @@ type Repo struct {
 
 // Minimal payload structs we care about for text extraction.
 // We intentionally model only the text-bearing parts.
+// Not currently used, but here for reference:
 
-type pushPayload struct {
-	// GitHub's PushEvent payload
-	Commits []struct {
-		SHA     string `json:"sha"`
-		Message string `json:"message"`
-	} `json:"commits"`
-}
+// type pushPayload struct {
+// 	// GitHub's PushEvent payload
+// 	Commits []struct {
+// 		SHA     string `json:"sha"`
+// 		Message string `json:"message"`
+// 	} `json:"commits"`
+// }
 
-type issuesPayload struct {
-	Action string `json:"action"`
-	Issue  struct {
-		Title string `json:"title"`
-		Body  string `json:"body"`
-	} `json:"issue"`
-}
+// type issuesPayload struct {
+// 	Action string `json:"action"`
+// 	Issue  struct {
+// 		Title string `json:"title"`
+// 		Body  string `json:"body"`
+// 	} `json:"issue"`
+// }
 
-type issueCommentPayload struct {
-	Action  string `json:"action"`
-	Comment struct {
-		Body string `json:"body"`
-	} `json:"comment"`
-	Issue struct {
-		Title string `json:"title"`
-	} `json:"issue"`
-}
+// type issueCommentPayload struct {
+// 	Action  string `json:"action"`
+// 	Comment struct {
+// 		Body string `json:"body"`
+// 	} `json:"comment"`
+// 	Issue struct {
+// 		Title string `json:"title"`
+// 	} `json:"issue"`
+// }
 
-type prPayload struct {
-	Action      string `json:"action"`
-	PullRequest struct {
-		Title string `json:"title"`
-		Body  string `json:"body"`
-	} `json:"pull_request"`
-}
+// type prPayload struct {
+// 	Action      string `json:"action"`
+// 	PullRequest struct {
+// 		Title string `json:"title"`
+// 		Body  string `json:"body"`
+// 	} `json:"pull_request"`
+// }
 
-type prReviewCommentPayload struct {
-	Action  string `json:"action"`
-	Comment struct {
-		Body string `json:"body"`
-	} `json:"comment"`
-}
+// type prReviewCommentPayload struct {
+// 	Action  string `json:"action"`
+// 	Comment struct {
+// 		Body string `json:"body"`
+// 	} `json:"comment"`
+// }
 
-type commitCommentPayload struct {
-	Action  string `json:"action"`
-	Comment struct {
-		Body string `json:"body"`
-	} `json:"comment"`
-}
+// type commitCommentPayload struct {
+// 	Action  string `json:"action"`
+// 	Comment struct {
+// 		Body string `json:"body"`
+// 	} `json:"comment"`
+// }

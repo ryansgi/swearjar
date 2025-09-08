@@ -45,6 +45,7 @@ type Client struct {
 	log    logger.Logger
 	now    func() time.Time
 	sleep  func(time.Duration)
+	state  []tokenState
 }
 
 // NewClient creates a new Client with sane defaults
@@ -77,19 +78,51 @@ func NewClient(o Options) *Client {
 		http:   &http.Client{Timeout: o.Timeout},
 		opts:   o,
 		tokens: toks,
+		state:  make([]tokenState, len(toks)),
 		log:    *logger.Named("github"),
 		now:    time.Now,
 		sleep:  time.Sleep,
 	}
 }
 
-// getToken returns the next token in a round robin rotation
-func (c *Client) getToken() string {
-	n := int(c.cur.Add(1))
+// nextIndex returns the next round-robin index starting from current cursor.
+func (c *Client) nextIndex() int {
 	if len(c.tokens) == 0 {
-		return ""
+		return -1
 	}
-	return c.tokens[n%len(c.tokens)]
+	n := int(c.cur.Add(1))       // Add returns the NEW value
+	i := (n - 1) % len(c.tokens) // so subtract 1 to start at 0
+	if i < 0 {                   // paranoia
+		i += len(c.tokens)
+	}
+	return i
+}
+
+// getToken chooses the next non-exhausted token if possible.
+// Falls back to plain round-robin if all are exhausted
+func (c *Client) getToken(now time.Time) (tok string, idx int) {
+	n := len(c.tokens)
+	if n == 0 {
+		return "", -1
+	}
+
+	// Try up to N tokens to find one with quota or already reset.
+	start := c.nextIndex()
+	i := start
+	for range n {
+		st := c.state[i]
+		if st.remaining > 0 || st.reset.IsZero() || !st.reset.After(now) {
+			return c.tokens[i], i
+		}
+		// advance (simple wrap)
+		i++
+		if i == n {
+			i = 0
+		}
+	}
+
+	// All appear exhausted; use round-robin slot anyway (server will 403 and we'll sleep)
+	return c.tokens[start], start
 }
 
 // Do issues a request with auth headers, etag, retries, and rate limit handling
@@ -113,7 +146,8 @@ func (c *Client) Do(ctx context.Context, method, path string, etagIn string) (*h
 		if etagIn != "" {
 			req.Header.Set("If-None-Match", etagIn)
 		}
-		if tok := c.getToken(); tok != "" {
+		tok, tokIdx := c.getToken(c.now())
+		if tok != "" {
 			req.Header.Set("Authorization", "token "+tok)
 		}
 
@@ -134,6 +168,12 @@ func (c *Client) Do(ctx context.Context, method, path string, etagIn string) (*h
 
 		// Always log lightweight response metadata
 		rem, reset, retryAfter := parseRateHeaders(resp.Header)
+		if tokIdx >= 0 && tokIdx < len(c.state) {
+			// Only update if header was present; leave zero-values alone otherwise
+			if rem >= 0 {
+				c.state[tokIdx] = tokenState{remaining: rem, reset: reset}
+			}
+		}
 		c.log.Debug().
 			Str("method", method).
 			Str("path", path).
@@ -150,26 +190,38 @@ func (c *Client) Do(ctx context.Context, method, path string, etagIn string) (*h
 			return resp, nil
 		case http.StatusNotModified:
 			return resp, nil
+
 		case http.StatusTooManyRequests, http.StatusForbidden:
-			// Respect Retry-After and X-RateLimit-Reset when present
+			// Respect Retry-After / X-RateLimit-Reset; when exhausted, return typed status error.
 			wait := computeWait(rem, reset, retryAfter, c.now())
 			if wait <= 0 {
 				wait = c.backoff(attempts)
 			}
 			if !c.shouldRetry(attempts) {
-				_ = drainAndClose(resp.Body)
-				return nil, perr.Newf(perr.ErrorCodeTooManyRequests, "github rate limited")
+				body := readSmall(resp.Body)
+				_ = resp.Body.Close()
+				return nil, &GHStatusError{
+					Status: resp.StatusCode,
+					Body:   body,
+					Err:    perr.Newf(perr.ErrorCodeTooManyRequests, "github rate limited"),
+				}
 			}
 			c.log.Warn().Dur("sleep", wait).Msg("github rate limited backing off")
 			_ = drainAndClose(resp.Body)
 			c.sleep(wait)
 			attempts++
 			continue
+
 		case http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
 			// transient server side
 			if !c.shouldRetry(attempts) {
-				_ = drainAndClose(resp.Body)
-				return nil, perr.Newf(perr.ErrorCodeUnavailable, "github transient server error")
+				body := readSmall(resp.Body)
+				_ = resp.Body.Close()
+				return nil, &GHStatusError{
+					Status: resp.StatusCode,
+					Body:   body,
+					Err:    perr.Newf(perr.ErrorCodeUnavailable, "github transient server error"),
+				}
 			}
 			back := c.backoff(attempts)
 			c.log.Warn().Dur("retry_in", back).Int("attempt", attempts).Msg("github transient error retrying")
@@ -177,13 +229,49 @@ func (c *Client) Do(ctx context.Context, method, path string, etagIn string) (*h
 			c.sleep(back)
 			attempts++
 			continue
+
 		default:
-			// read a small tail for diagnostics then return
-			body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+			// Non-2xx/3xx (404/410/451/etc.); return GHStatusError so worker can tombstone.
+			body := readSmall(resp.Body)
 			_ = resp.Body.Close()
-			return nil, perr.Newf(perr.ErrorCodeUnknown, "github unexpected status %d body %s", resp.StatusCode, string(body))
+			return nil, &GHStatusError{
+				Status: resp.StatusCode,
+				Body:   body,
+				Err:    perr.Newf(mapPerrCode(resp.StatusCode), "github unexpected status %d", resp.StatusCode),
+			}
 		}
 	}
+}
+
+// mapPerrCode maps HTTP status to platform error codes for easier policy handling.
+func mapPerrCode(status int) perr.ErrorCode {
+	switch status {
+	case 404:
+		return perr.ErrorCodeNotFound
+	case 410:
+		return perr.ErrorCodeGone // new code in platform/errors
+	case 451:
+		return perr.ErrorCodeLegal // new code in platform/errors
+	case 401:
+		return perr.ErrorCodeUnauthorized
+	case 403:
+		return perr.ErrorCodeForbidden
+	case 429:
+		return perr.ErrorCodeTooManyRequests
+	case 500, 502, 503, 504:
+		return perr.ErrorCodeUnavailable
+	default:
+		return perr.ErrorCodeUnknown
+	}
+}
+
+// readSmall reads a small tail for diagnostics (kept separate from drainAndClose for reuse).
+func readSmall(rc io.ReadCloser) string {
+	b, _ := io.ReadAll(io.LimitReader(rc, 2048))
+	// avoid logging newlines/control chars in single-line logs
+	s := strings.TrimSpace(string(b))
+	s = strings.ReplaceAll(s, "\n", " ")
+	return s
 }
 
 func (c *Client) backoff(attempt int) time.Duration {

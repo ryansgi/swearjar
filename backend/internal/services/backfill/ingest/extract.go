@@ -41,8 +41,6 @@ func (extractor) FromEvent(env domain.EventEnvelope, n domain.Normalizer) []doma
 
 			TextRaw:        textRaw,
 			TextNormalized: u.TextNormalized, // already sanitized via Normalizer.Normalize
-			LangCode:       u.LangCode,
-			Script:         u.Script,
 		})
 	}
 	return out

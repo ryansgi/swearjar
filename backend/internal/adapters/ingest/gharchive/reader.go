@@ -161,5 +161,5 @@ func truncateUTF8(b []byte, max int) string {
 	if i <= 0 {
 		i = max
 	}
-	return string(b[:i]) + "…"
+	return string(b[:i]) + "..."
 }

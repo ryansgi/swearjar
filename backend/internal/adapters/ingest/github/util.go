@@ -7,6 +7,28 @@ import (
 	"time"
 )
 
+// GHStatusError wraps non-2xx HTTP responses from GitHub
+type GHStatusError struct {
+	Status int
+	Body   string
+	Err    error
+}
+
+// Error interface
+func (e *GHStatusError) Error() string { return e.Err.Error() }
+
+// Unwrap interface
+func (e *GHStatusError) Unwrap() error { return e.Err }
+
+// HTTPStatus interface
+func (e *GHStatusError) HTTPStatus() int { return e.Status }
+
+// tokenState
+type tokenState struct {
+	remaining int
+	reset     time.Time
+}
+
 func parseRateHeaders(h http.Header) (remaining int, reset time.Time, retryAfter int) {
 	remaining = atoi(h.Get("X-RateLimit-Remaining"))
 	rs := h.Get("X-RateLimit-Reset")

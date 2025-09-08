@@ -53,3 +53,28 @@ func Ptr(s string) *string {
 	}
 	return &s
 }
+
+// SQLNull returns nil if s is blank/whitespace, else the original string.
+// Useful for query args where NULL is desired for blanks
+func SQLNull(s string) any {
+	if std.TrimSpace(s) == "" {
+		return nil
+	}
+	return s
+}
+
+// SQLNullPtr returns nil if ps is nil or points to a blank string, else the dereferenced string
+func SQLNullPtr(ps *string) any {
+	if ps == nil || std.TrimSpace(*ps) == "" {
+		return nil
+	}
+	return *ps
+}
+
+// Deref returns "" if ps is nil, else *ps.
+func Deref(ps *string) string {
+	if ps == nil {
+		return ""
+	}
+	return *ps
+}

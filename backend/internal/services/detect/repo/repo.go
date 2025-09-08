@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"swearjar/internal/modkit/repokit"
+	str "swearjar/internal/platform/strings"
 	"swearjar/internal/services/detect/domain"
 )
 
@@ -58,20 +59,38 @@ func (s *pg) WriteHitsBatch(ctx context.Context, xs []domain.Hit) error {
 	if len(xs) == 0 {
 		return nil
 	}
+
 	var sb strings.Builder
 	sb.WriteString(`INSERT INTO hits
-		(utterance_id, term, category, severity, span_start, span_end, detector_version)
+		(utterance_id, term, category, severity, span_start, span_end, detector_version, lang_code)
 		VALUES `)
-	args := make([]any, 0, len(xs)*7)
+
+	// 8 params per row now (added lang_code)
+	args := make([]any, 0, len(xs)*8)
+
 	for i, h := range xs {
 		if i > 0 {
 			sb.WriteByte(',')
 		}
-		base := i*7 + 1
-		fmt.Fprintf(&sb, "($%d,$%d,$%d,$%d,$%d,$%d,$%d)", base, base+1, base+2, base+3, base+4, base+5, base+6)
-		args = append(args, h.UtteranceID, h.Term, h.Category, h.Severity, h.StartOffset, h.EndOffset, h.DetectorVersion)
+		base := i*8 + 1
+		fmt.Fprintf(&sb, "($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)",
+			base, base+1, base+2, base+3, base+4, base+5, base+6, base+7,
+		)
+
+		args = append(args,
+			h.UtteranceID,
+			h.Term,
+			h.Category,
+			h.Severity,
+			h.StartOffset,
+			h.EndOffset,
+			h.DetectorVersion,
+			str.SQLNullPtr(h.LangCode),
+		)
 	}
+
 	sb.WriteString(` ON CONFLICT (utterance_id, term, span_start, span_end, detector_version) DO NOTHING`)
+
 	_, err := s.q.Exec(ctx, sb.String(), args...)
 	return err
 }
