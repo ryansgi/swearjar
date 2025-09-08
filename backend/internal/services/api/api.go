@@ -12,6 +12,7 @@ import (
 	"swearjar/internal/modkit/module"
 	"swearjar/internal/modkit/swaggerkit"
 
+	bouncermod "swearjar/internal/services/api/bouncer/module"
 	metamod "swearjar/internal/services/api/meta/module"
 	samplesmod "swearjar/internal/services/api/samples/module"
 	statsmod "swearjar/internal/services/api/stats/module"
@@ -34,15 +35,11 @@ func Mount(r phttp.Router, opt Options) {
 		PG:  opt.Store.PG,
 	}
 
-	// build modules
-	meta := metamod.New(deps)
-	stats := statsmod.New(deps)
-	samples := samplesmod.New(deps)
-
 	mods := []module.Module{
-		stats,
-		samples,
-		meta,
+		metamod.New(deps),
+		statsmod.New(deps),
+		samplesmod.New(deps),
+		bouncermod.New(deps),
 	}
 
 	// versioned API with a common middleware stack
