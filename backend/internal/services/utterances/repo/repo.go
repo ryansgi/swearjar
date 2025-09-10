@@ -25,7 +25,7 @@ type Storage interface {
 
 type pg struct{ q repokit.Queryer }
 
-// List implements domain.ReaderPort
+// List implements Storage
 func (s *pg) List(ctx context.Context, in domain.ListInput, hardLimit int) ([]domain.Row, domain.AfterKey, error) {
 	// Dynamic WHERE with numbered args
 	var sb strings.Builder
@@ -60,19 +60,6 @@ func (s *pg) List(ctx context.Context, in domain.ListInput, hardLimit int) ([]do
 
 	if in.RepoName != "" {
 		sb.WriteString("  AND u.repo_name = " + arg(in.RepoName) + "\n")
-	}
-	if in.Owner != "" {
-		// owner = split_part(repo_name,'/',1)
-		sb.WriteString("  AND split_part(u.repo_name, '/', 1) = " + arg(in.Owner) + "\n")
-	}
-	if in.RepoID != nil {
-		sb.WriteString("  AND u.repo_id = " + arg(*in.RepoID) + "\n")
-	}
-	if in.ActorLogin != "" {
-		sb.WriteString("  AND u.actor_login = " + arg(in.ActorLogin) + "\n")
-	}
-	if in.ActorID != nil {
-		sb.WriteString("  AND u.actor_id = " + arg(*in.ActorID) + "\n")
 	}
 	if in.LangCode != "" {
 		sb.WriteString("  AND u.lang_code = " + arg(in.LangCode) + "\n")
