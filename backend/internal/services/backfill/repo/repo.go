@@ -2,17 +2,14 @@
 package repo
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
 	"database/sql"
 	"fmt"
-	"sort"
-	"strconv"
 	"time"
 
 	"swearjar/internal/modkit/repokit"
 	"swearjar/internal/services/backfill/domain"
+	identdom "swearjar/internal/services/ident/domain"
 )
 
 type (
@@ -26,17 +23,6 @@ func NewPG() repokit.Binder[domain.StorageRepo] { return PG{} }
 
 // Bind implements repokit.Binder
 func (PG) Bind(q repokit.Queryer) domain.StorageRepo { return &queries{q: q} }
-
-// HIDs (one-way; privacy-first)
-func makeRepoHID(repoID int64) []byte {
-	h := sha256.Sum256([]byte("repo:" + strconv.FormatInt(repoID, 10)))
-	return h[:] // 32 bytes
-}
-
-func makeActorHID(actorID int64) []byte {
-	h := sha256.Sum256([]byte("actor:" + strconv.FormatInt(actorID, 10)))
-	return h[:]
-}
 
 // StartHour marks the start of a backfill hour (idempotent)
 func (r *queries) StartHour(ctx context.Context, hour time.Time) error {
@@ -74,131 +60,26 @@ func (r *queries) FinishHour(ctx context.Context, hour time.Time, fin domain.Hou
 	return err
 }
 
-// EnsurePrincipalsAndMaps inserts missing principals and GH maps via temp-table anti-join
-// The goal here is to avoid long transactions and heavy lock contention
-// on the main principals_* tables. This is a best-effort operation;
-// if it fails, the caller can retry the entire batch.
-func (r *queries) EnsurePrincipalsAndMaps(ctx context.Context,
-	repos map[[32]byte]int64, actors map[[32]byte]int64,
-) error {
-	if len(repos) == 0 && len(actors) == 0 {
-		return nil
-	}
-
-	keysSorted := func(m map[[32]byte]int64) [][32]byte {
-		hs := make([][32]byte, 0, len(m))
-		for h := range m {
-			hs = append(hs, h)
-		}
-		sort.Slice(hs, func(i, j int) bool { return bytes.Compare(hs[i][:], hs[j][:]) < 0 })
-		return hs
-	}
-	makeHexes := func(hs [][32]byte) []string {
-		xs := make([]string, len(hs))
-		for i, h := range hs {
-			xs[i] = fmt.Sprintf("%x", h)
-		}
-		return xs
-	}
-	makeHexesAndIDs := func(m map[[32]byte]int64, hs [][32]byte) ([]string, []int64) {
-		hexes := make([]string, len(hs))
-		ids := make([]int64, len(hs))
-		for i, h := range hs {
-			hexes[i], ids[i] = fmt.Sprintf("%x", h), m[h]
-		}
-		return hexes, ids
-	}
-
-	// Prior versions used ON CONFLICT path; now it removes a ton of per-row unique checks & hot-leaf thrash
-
-	// Principals: repos
-	if len(repos) > 0 {
-		hs := keysSorted(repos)
-		hexes := makeHexes(hs)
-
-		// stage and anti-join -> principals_repos (NO ON CONFLICT path)
-		if _, err := r.q.Exec(ctx, `
-			CREATE TEMP TABLE IF NOT EXISTS _hid_repo(stage_hid hid_bytes) ON COMMIT DROP;
-			TRUNCATE _hid_repo;
-		`); err != nil {
-			return fmt.Errorf("stage repos: create temp: %w", err)
-		}
-		if _, err := r.q.Exec(ctx, `
-			INSERT INTO _hid_repo(stage_hid) SELECT decode(x,'hex')::hid_bytes FROM unnest($1::text[]) AS t(x);
-		`, hexes); err != nil {
-			return fmt.Errorf("stage repos: load: %w", err)
-		}
-		if _, err := r.q.Exec(ctx, `
-			INSERT INTO principals_repos (repo_hid)
-			SELECT s.stage_hid FROM _hid_repo s
-			LEFT JOIN principals_repos p ON p.repo_hid = s.stage_hid
-			WHERE p.repo_hid IS NULL;
-		`); err != nil {
-			return fmt.Errorf("ensure principals_repos: %w", err)
-		}
-
-		// ident map (bulk shim; runs as SECURITY DEFINER)
-		hexes, ids := makeHexesAndIDs(repos, hs)
-		if _, err := r.q.Exec(ctx,
-			`SELECT ident.bulk_upsert_gh_repo_map($1::text[], $2::bigint[])`,
-			hexes, ids,
-		); err != nil {
-			return fmt.Errorf("repo map bulk upsert: %w", err)
-		}
-	}
-
-	// Principals: actors
-	if len(actors) > 0 {
-		hs := keysSorted(actors)
-		hexes := makeHexes(hs)
-
-		if _, err := r.q.Exec(ctx, `
-			CREATE TEMP TABLE IF NOT EXISTS _hid_actor(stage_hid hid_bytes) ON COMMIT DROP;
-			TRUNCATE _hid_actor;
-		`); err != nil {
-			return fmt.Errorf("stage actors: create temp: %w", err)
-		}
-		if _, err := r.q.Exec(ctx, `
-			INSERT INTO _hid_actor(stage_hid) SELECT decode(x,'hex')::hid_bytes FROM unnest($1::text[]) AS t(x);
-		`, hexes); err != nil {
-			return fmt.Errorf("stage actors: load: %w", err)
-		}
-		if _, err := r.q.Exec(ctx, `
-			INSERT INTO principals_actors (actor_hid)
-			SELECT s.stage_hid FROM _hid_actor s LEFT JOIN principals_actors p ON p.actor_hid = s.stage_hid
-			WHERE p.actor_hid IS NULL;
-		`); err != nil {
-			return fmt.Errorf("ensure principals_actors: %w", err)
-		}
-
-		hexes, ids := makeHexesAndIDs(actors, hs)
-		if _, err := r.q.Exec(ctx,
-			`SELECT ident.bulk_upsert_gh_actor_map($1::text[], $2::bigint[])`,
-			hexes, ids,
-		); err != nil {
-			return fmt.Errorf("actor map bulk upsert: %w", err)
-		}
-	}
-
-	return nil
-}
-
 func (r *queries) InsertUtterances(ctx context.Context, us []domain.Utterance) (int, int, error) {
 	const insertUttSQL = `
-        INSERT INTO utterances (
-            event_id, event_type,
-            repo_hid, actor_hid, hid_key_version,
-            created_at,
-            source, source_detail, ordinal,
-            text_raw, text_normalized
-        ) VALUES (
-            $1, $2,
-            $3, $4, $5,
-            $6,
-            $7::source_enum, $8, $9,
-            $10, $11
-        )
-        ON CONFLICT (event_id, source, ordinal) DO NOTHING;`
+		INSERT INTO utterances (
+			event_id, event_type, repo_hid, actor_hid, hid_key_version,
+			created_at, source, source_detail, ordinal, text_raw, text_normalized
+		)
+		SELECT
+			$1, $2, $3::hid_bytes, $4::hid_bytes, $5,
+			$6, $7::source_enum, $8, $9, $10, $11
+		WHERE
+			NOT EXISTS (
+				SELECT 1 FROM consent_receipts r
+				WHERE r.principal='repo' AND r.action='opt_out' AND r.state='active' AND r.principal_hid=$3::hid_bytes
+			)
+			AND NOT EXISTS (
+				SELECT 1 FROM consent_receipts r
+				WHERE r.principal='actor' AND r.action='opt_out' AND r.state='active' AND r.principal_hid=$4::hid_bytes
+			)
+		ON CONFLICT (event_id, source, ordinal) DO NOTHING
+	`
 
 	// assign ordinals deterministically per (event_id, source)
 	type k struct{ event, source string }
@@ -216,8 +97,8 @@ func (r *queries) InsertUtterances(ctx context.Context, us []domain.Utterance) (
 
 	attempts, inserted := 0, 0
 	for _, u := range batch {
-		repoHID := makeRepoHID(u.RepoID)
-		actorHID := makeActorHID(u.ActorID)
+		repoHID := identdom.RepoHID32(u.RepoID).Bytes()    // pass []byte
+		actorHID := identdom.ActorHID32(u.ActorID).Bytes() // pass []byte
 		attempts++
 		tag, err := r.q.Exec(ctx, insertUttSQL,
 			u.EventID, u.EventType,
