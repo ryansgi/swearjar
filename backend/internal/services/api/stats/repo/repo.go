@@ -48,7 +48,7 @@ func NewPG() repokit.Binder[Repo] { return PG{} }
 func (PG) Bind(q repokit.Queryer) Repo { return &queries{q: q} }
 
 // Daily by language (with optional repo/lang filters and min_severity threshold)
-// Counts hits and distinct utterances per (day, lang).
+// Counts hits and distinct utterances per (day, lang)
 func (r *queries) ByLang(ctx context.Context, start, end, repo, lang, minSev string) ([]RowByLang, error) {
 	const sql = `
 		with base as (
@@ -97,7 +97,7 @@ func (r *queries) ByLang(ctx context.Context, start, end, repo, lang, minSev str
 	return out, rows.Err()
 }
 
-// Top repos by hits (optional lang filter).
+// Top repos by hits (optional lang filter)
 func (r *queries) ByRepo(ctx context.Context, start, end, lang string) ([]RowByRepo, error) {
 	const sql = `
 		select u.repo_name as repo, count(h.*) as hits
@@ -125,7 +125,7 @@ func (r *queries) ByRepo(ctx context.Context, start, end, lang string) ([]RowByR
 	return out, rows.Err()
 }
 
-// Buckets by category/severity (optional repo filter).
+// Buckets by category/severity (optional repo filter)
 func (r *queries) ByCategory(ctx context.Context, start, end, repo string) ([]RowByCategory, error) {
 	const sql = `
 		select h.category::text, h.severity::text, count(*) as hits
