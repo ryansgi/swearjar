@@ -15,6 +15,8 @@ import (
 	"swearjar/internal/services/backfill/service"
 
 	detectmod "swearjar/internal/services/detect/module"
+	identRepoBinder "swearjar/internal/services/ident/repo"
+	identservice "swearjar/internal/services/ident/service"
 )
 
 // Ports defines the backfill module ports
@@ -49,8 +51,12 @@ func New(deps modkit.Deps) *Module {
 
 	// Construct the backfill service
 	svc := service.New(
-		repokit.TxRunner(deps.PG), storeBinder,
-		fetch, reader, extract, norm,
+		repokit.TxRunner(deps.PG),
+		storeBinder,
+		fetch,
+		reader,
+		extract,
+		norm,
 		service.Config{
 			DelayPerHour:  opts.DelayPerHour,
 			Workers:       opts.Workers,
@@ -65,6 +71,8 @@ func New(deps modkit.Deps) *Module {
 		},
 		leaseFn,
 		nil, // detect writer (optional); set below when enabled and available
+	).WithIdentService(
+		identservice.New(repokit.TxRunner(deps.PG), identRepoBinder.NewPG()),
 	)
 
 	// If detect is enabled, resolve detect module's Writer from the registry.
