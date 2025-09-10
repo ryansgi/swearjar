@@ -1,6 +1,7 @@
 package github
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -68,4 +69,23 @@ func atoi(s string) int {
 func drainAndClose(rc io.ReadCloser) error {
 	_, _ = io.Copy(io.Discard, io.LimitReader(rc, 512))
 	return rc.Close()
+}
+
+// IsRateLimited reports whether err is a GHStatusError with 429 or 403 status
+func IsRateLimited(err error) bool {
+	var gse *GHStatusError
+	if errors.As(err, &gse) {
+		// GitHub may use 429 or 403 (secondary RL)
+		return gse.Status == 429 || gse.Status == 403
+	}
+	return false
+}
+
+// IsTransient reports whether err is a GHStatusError with a 5xx status
+func IsTransient(err error) bool {
+	var gse *GHStatusError
+	if errors.As(err, &gse) {
+		return gse.Status == 500 || gse.Status == 502 || gse.Status == 503 || gse.Status == 504
+	}
+	return false
 }
