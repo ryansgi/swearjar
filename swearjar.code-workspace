@@ -8,6 +8,18 @@
     "editor.formatOnSave": true,
     "editor.rulers": [120],
 
+    "triggerTaskOnSave.on": true,
+    // Run our lint task when any .go file is saved
+    "triggerTaskOnSave.tasks": {
+      "lint:comments": ["**/*.go"]
+    },
+    // (Optional) run this task regardless of selection in the status bar:
+    "triggerTaskOnSave.selectedTask": "lint:comments",
+    // (Optional) helpful extras
+    "triggerTaskOnSave.delay": 150,
+    "triggerTaskOnSave.restart": true,
+    "triggerTaskOnSave.showNotifications": false,
+
     // Go
     "gopls": {
       "staticcheck": true,
@@ -60,7 +72,36 @@
       "esbenp.prettier-vscode",
       "dbaeumer.vscode-eslint",
       "bradlc.vscode-tailwindcss",
-      "streetsidesoftware.code-spell-checker"
+      "streetsidesoftware.code-spell-checker",
+      "Gruntfuggly.triggertaskonsave"
+    ]
+  },
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "lint:comments",
+        "type": "shell",
+        "command": "bash",
+        "args": ["hack/lint-comments.sh", "${file}"],
+        "group": "test",
+        "presentation": {
+          "reveal": "always",
+          "revealProblems": "always",
+          "clear": true
+        },
+        "problemMatcher": {
+          "owner": "commentlint",
+          "fileLocation": "absolute",
+          "pattern": {
+            "regexp": "^(.*?):(\\d+):\\s*(.*)$",
+            "file": 1,
+            "line": 2,
+            "message": 3
+          }
+        },
+        "runOptions": { "reevaluateOnRerun": true }
+      }
     ]
   }
 }
