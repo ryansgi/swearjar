@@ -3,17 +3,16 @@ package service
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"io"
 	"math/rand"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	detectdom "swearjar/internal/services/detect/domain"
+	identdom "swearjar/internal/services/ident/domain"
 
 	"swearjar/internal/modkit/repokit"
 	perr "swearjar/internal/platform/errors"
@@ -22,7 +21,7 @@ import (
 )
 
 // DetectWriterPort is an alias to the detect writer port so module wiring
-// does not need to import the detect domain directly from here if undesired.
+// does not need to import the detect domain directly from here if undesired
 type DetectWriterPort = detectdom.WriterPort
 
 // Config holds configuration options for the backfill service
@@ -38,7 +37,6 @@ type Config struct {
 	// Timeouts applied via guardrails
 	FetchTimeout time.Duration
 	ReadTimeout  time.Duration
-	// DB timeout is handled with SET LOCAL lock/statement/deadlock (per-tx)
 
 	// Range guard
 	MaxRangeHours int // 0 = unlimited
@@ -73,6 +71,14 @@ type Service struct {
 	Lease func(ctx context.Context, hour time.Time, do func(context.Context) error) error
 
 	principalsSem chan struct{}
+
+	identPort identdom.Ports
+}
+
+// WithIdentService wires an ident service port for use in lookups
+func (s *Service) WithIdentService(p identdom.Ports) *Service {
+	s.identPort = p
+	return s
 }
 
 // New constructs the backfill service
@@ -208,7 +214,7 @@ func (s *Service) runHourWithRetry(ctx context.Context, hr domain.HourRef) error
 func (s *Service) runHour(ctx context.Context, hr domain.HourRef) (retErr error) {
 	hourUTC := hr.UTC()
 	if s.Lease != nil && s.Cfg.EnableLeases {
-		// If another worker holds the hour, treat as clean skip.
+		// If another worker holds the hour, treat as clean skip
 		if err := s.Lease(ctx, hourUTC, func(ctx context.Context) error { return s.runHourUnlocked(ctx, hr) }); err != nil {
 			if isLeaseHeld(err) {
 				return nil
@@ -406,9 +412,9 @@ func (s *Service) runHourUnlocked(ctx context.Context, hr domain.HourRef) (retEr
 				TextNorm:    u.TextNormalized,
 				CreatedAt:   u.CreatedAt,
 				Source:      u.Source,
-				RepoHID:     hidRepo(u.RepoID),
-				ActorHID:    hidActor(u.ActorID),
-				LangCode:    got.LangCode, // <-- from DB (trigger-populated)
+				RepoHID:     identdom.RepoHID32(u.RepoID).Bytes(),
+				ActorHID:    identdom.ActorHID32(u.ActorID).Bytes(),
+				LangCode:    got.LangCode,
 			})
 		}
 		if len(wbatch) > 0 {
@@ -432,6 +438,9 @@ func (s *Service) runHourUnlocked(ctx context.Context, hr domain.HourRef) (retEr
 // insertBatchRobust writes a slice with retries; if it still fails with a
 // retryable commit abort, it bisects the batch and attempts each half.
 // Guarantees eventual progress (down to size 1) for retryable failures
+// insertBatchRobust writes a slice with retries; if it still fails with a
+// retryable commit abort, it bisects the batch and attempts each half.
+// Guarantees eventual progress (down to size 1) for retryable failures
 func (s *Service) insertBatchRobust(ctx context.Context, batch []domain.Utterance) (int, int, error) {
 	if len(batch) == 0 {
 		return 0, 0, nil
@@ -446,32 +455,24 @@ func (s *Service) insertBatchRobust(ctx context.Context, batch []domain.Utteranc
 	tryOnce := func(c context.Context, xs []domain.Utterance) (int, int, error) {
 		var ins, dd int
 
-		// Build HID sets for this batch
-		seenRepo, seenActor := map[[32]byte]int64{}, map[[32]byte]int64{}
+		// Build HID sets for this batch (typed map keys, zero-alloc constructors)
+		seenRepo, seenActor := map[identdom.HID32]int64{}, map[identdom.HID32]int64{}
 		for _, u := range xs {
-			if u.RepoID == 0 || u.ActorID == 0 {
-				continue
+			if u.RepoID != 0 {
+				seenRepo[identdom.RepoHID32(u.RepoID)] = u.RepoID
 			}
-			var rk, ak [32]byte
-			copy(rk[:], hidRepo(u.RepoID))
-			copy(ak[:], hidActor(u.ActorID))
-			if _, ok := seenRepo[rk]; !ok {
-				seenRepo[rk] = u.RepoID
-			}
-			if _, ok := seenActor[ak]; !ok {
-				seenActor[ak] = u.ActorID
+			if u.ActorID != 0 {
+				seenActor[identdom.ActorHID32(u.ActorID)] = u.ActorID
 			}
 		}
 
-		// Short Tx: principals + maps (throttled), NO lock_timeout
+		// Short path: principals + maps (throttled), NO lock_timeout
 		if len(seenRepo) > 0 || len(seenActor) > 0 {
 			s.principalsSem <- struct{}{}
-			err := s.DB.Tx(c, func(q repokit.Queryer) error {
-				return s.Binder.Bind(q).EnsurePrincipalsAndMaps(c, seenRepo, seenActor)
-			})
+			upErr := s.identPort.EnsurePrincipalsAndMaps(c, seenRepo, seenActor)
 			<-s.principalsSem
-			if err != nil {
-				return 0, 0, err
+			if upErr != nil {
+				return 0, 0, upErr
 			}
 		}
 
@@ -583,15 +584,4 @@ func applyTxTuning(ctx context.Context, q repokit.Queryer) {
 // treat "hour lease already held" as a contention signal
 func isLeaseHeld(err error) bool {
 	return errors.Is(err, guardrails.ErrLeaseHeld)
-}
-
-// hid helpers (privacy-first; one-way)
-func hidRepo(id int64) []byte {
-	h := sha256.Sum256([]byte("repo:" + strconv.FormatInt(id, 10)))
-	return h[:]
-}
-
-func hidActor(id int64) []byte {
-	h := sha256.Sum256([]byte("actor:" + strconv.FormatInt(id, 10)))
-	return h[:]
 }
