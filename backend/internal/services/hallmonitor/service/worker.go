@@ -55,7 +55,7 @@ func (s *Svc) runRepoLoop(ctx context.Context, batch int, leaseFor time.Duration
 			for _, j := range jobs {
 				hidHex := hex.EncodeToString(j.RepoHID)
 
-				// DryRun: just ack the HID job.
+				// DryRun: just ack the HID job
 				if s.config.DryRun {
 					if err := s.Repo.AckRepoHID(ctx, j.RepoHID); err != nil {
 						return err
@@ -63,7 +63,7 @@ func (s *Svc) runRepoLoop(ctx context.Context, batch int, leaseFor time.Duration
 					continue
 				}
 
-				// Resolve HID -> numeric GitHub repo ID (needed even pre opt-in).
+				// Resolve HID -> numeric GitHub repo ID (needed even pre opt-in)
 				ghRepoID, ok, err := s.Repo.ResolveRepoGHID(ctx, j.RepoHID)
 				if err != nil {
 					s.handleRepoErrorHID(ctx, j.RepoHID, j.Attempts, err)
@@ -98,7 +98,7 @@ func (s *Svc) runRepoLoop(ctx context.Context, batch int, leaseFor time.Duration
 					}
 				}
 
-				// Fetch repo by numeric ID with conditional ETag.
+				// Fetch repo by numeric ID with conditional ETag
 				repoDoc, etagOut, notmod, err := s.gh.RepoByID(ctx, ghRepoID, etagIn)
 				if err != nil {
 					s.handleRepoErrorHID(ctx, j.RepoHID, j.Attempts, err)
@@ -121,7 +121,7 @@ func (s *Svc) runRepoLoop(ctx context.Context, batch int, leaseFor time.Duration
 					continue
 				}
 
-				// Languages: prefer owner/name; if absent, try from repoDoc.
+				// Languages: prefer owner/name; if absent, try from repoDoc
 				if owner == "" || name == "" {
 					if repoDoc.FullName != "" {
 						owner, name = splitOwnerName(repoDoc.FullName)
@@ -138,7 +138,7 @@ func (s *Svc) runRepoLoop(ctx context.Context, batch int, leaseFor time.Duration
 				}
 
 				rec := mapRepoToRecord(s.config.Cadence, repoDoc, langs, etagOut)
-				// NOTE: UpsertRepositoryHID will only persist PII (full_name) when an active opt-in exists.
+				// NOTE: UpsertRepositoryHID will only persist PII (full_name) when an active opt-in exists
 				if err := s.Repo.UpsertRepositoryHID(ctx, j.RepoHID, rec); err != nil {
 					s.handleRepoErrorHID(ctx, j.RepoHID, j.Attempts, err)
 					continue
@@ -223,7 +223,7 @@ func (s *Svc) runActorLoop(ctx context.Context, batch int, leaseFor time.Duratio
 				}
 
 				rec := mapUserToActorRecord(s.config.Cadence, userDoc, etagOut)
-				// NOTE: UpsertActorHID will only persist PII (login/name) when an active opt-in exists.
+				// NOTE: UpsertActorHID will only persist PII (login/name) when an active opt-in exists
 				if err := s.Repo.UpsertActorHID(ctx, j.ActorHID, rec); err != nil {
 					s.handleActorErrorHID(ctx, j.ActorHID, j.Attempts, err)
 					continue
@@ -332,7 +332,7 @@ func jitter90to180() time.Duration {
 	return time.Duration(days) * 24 * time.Hour
 }
 
-// httpStatusFromError tries hard to extract an HTTP status from err.
+// httpStatusFromError tries hard to extract an HTTP status from err
 func httpStatusFromError(err error) int {
 	// perr helper, if your client wrapped it that way
 	if s := perr.HTTPStatus(err); s != 0 {

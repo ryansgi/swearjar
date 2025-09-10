@@ -9,7 +9,7 @@ import (
 	"swearjar/internal/services/hallmonitor/domain"
 )
 
-// PrimaryLanguageOfRepo returns repositories.primary_lang for a given repo id (numeric wrapper).
+// PrimaryLanguageOfRepo returns repositories.primary_lang for a given repo id (numeric wrapper)
 func (r *queries) PrimaryLanguageOfRepo(ctx context.Context, repoID int64) (string, bool, error) {
 	return r.primaryLanguageOfRepoHID(ctx, makeRepoHID(repoID))
 }
@@ -30,7 +30,7 @@ func (r *queries) primaryLanguageOfRepoHID(ctx context.Context, repoHID []byte) 
 	return lang.String, true, nil
 }
 
-// LanguagesOfRepo returns the languages jsonb as a flat map for a repo (numeric wrapper).
+// LanguagesOfRepo returns the languages jsonb as a flat map for a repo (numeric wrapper)
 func (r *queries) LanguagesOfRepo(ctx context.Context, repoID int64) (map[string]int64, bool, error) {
 	return r.languagesOfRepoHID(ctx, makeRepoHID(repoID))
 }
@@ -51,7 +51,7 @@ func (r *queries) languagesOfRepoHID(ctx context.Context, repoHID []byte) (map[s
 	return raw, true, nil
 }
 
-// PrimaryLanguageOfActor returns dominant repo primary language over a window (numeric wrapper).
+// PrimaryLanguageOfActor returns dominant repo primary language over a window (numeric wrapper)
 func (r *queries) PrimaryLanguageOfActor(
 	ctx context.Context,
 	actorID int64,
@@ -64,7 +64,7 @@ func (r *queries) PrimaryLanguageOfActor(
 	return r.PrimaryLanguageOfActorHID(ctx, makeActorHID(actorID), w)
 }
 
-// PrimaryLanguageOfActorHID returns dominant repo primary language using actor_hid.
+// PrimaryLanguageOfActorHID returns dominant repo primary language using actor_hid
 func (r *queries) PrimaryLanguageOfActorHID(
 	ctx context.Context,
 	actorHID []byte,
@@ -100,7 +100,7 @@ func (r *queries) PrimaryLanguageOfActorHID(
 	return lang, true, nil
 }
 
-// LanguagesOfActor returns a frequency map of repo primary languages for an actor over a window (numeric wrapper).
+// LanguagesOfActor returns a frequency map of repo primary languages for an actor over a window (numeric wrapper)
 func (r *queries) LanguagesOfActor(ctx context.Context, actorID int64, w domain.LangWindow) (map[string]int64, error) {
 	return r.LanguagesOfActorHID(
 		ctx,
@@ -109,7 +109,7 @@ func (r *queries) LanguagesOfActor(ctx context.Context, actorID int64, w domain.
 	)
 }
 
-// LanguagesOfActorHID returns a frequency map using actor_hid.
+// LanguagesOfActorHID returns a frequency map using actor_hid
 func (r *queries) LanguagesOfActorHID(
 	ctx context.Context,
 	actorHID []byte,

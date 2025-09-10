@@ -1,4 +1,4 @@
-// Package repo provides the hits repository implementation.
+// Package repo provides the hits repository implementation
 package repo
 
 import (
@@ -108,15 +108,6 @@ func (s *pg) ListSamples(
 	}
 	if f.Owner != "" {
 		sb.WriteString("  AND split_part(u.repo_name, '/', 1) = " + arg(f.Owner) + "\n")
-	}
-	if f.RepoID != nil {
-		sb.WriteString("  AND u.repo_id = " + arg(*f.RepoID) + "\n")
-	}
-	if f.ActorLogin != "" {
-		sb.WriteString("  AND u.actor_login = " + arg(f.ActorLogin) + "\n")
-	}
-	if f.ActorID != nil {
-		sb.WriteString("  AND u.actor_id = " + arg(*f.ActorID) + "\n")
 	}
 	if f.LangCode != "" {
 		sb.WriteString("  AND u.lang_code = " + arg(f.LangCode) + "\n")

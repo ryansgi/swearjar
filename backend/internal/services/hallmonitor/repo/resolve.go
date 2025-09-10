@@ -6,7 +6,7 @@ import (
 )
 
 // ResolveRepoGHID returns the GitHub numeric repo ID for a given HID.
-// Always writes an audit row; audit failures are ignored.
+// Always writes an audit row; audit failures are ignored
 func (r *queries) ResolveRepoGHID(ctx context.Context, repoHID []byte) (int64, bool, error) {
 	const q = `SELECT ident.resolve_repo($1, $2, $3)`
 	var id sql.NullInt64
@@ -22,7 +22,7 @@ func (r *queries) ResolveRepoGHID(ctx context.Context, repoHID []byte) (int64, b
 }
 
 // ResolveActorGHID returns the GitHub numeric user ID for a given HID.
-// Always writes an audit row; audit failures are ignored.
+// Always writes an audit row; audit failures are ignored
 func (r *queries) ResolveActorGHID(ctx context.Context, actorHID []byte) (int64, bool, error) {
 	const q = `SELECT ident.resolve_actor($1, $2, $3)`
 	var id sql.NullInt64

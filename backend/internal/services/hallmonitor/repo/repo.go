@@ -14,21 +14,21 @@ import (
 	"swearjar/internal/services/hallmonitor/domain"
 )
 
-// Repo defines the hallmonitor repository contract.
+// Repo defines the hallmonitor repository contract
 type Repo interface {
-	// Signals from ingest/backfill to record sightings and enqueue work if needed (numeric convenience).
+	// Signals from ingest/backfill to record sightings and enqueue work if needed (numeric convenience)
 	SeenRepo(ctx context.Context, repoID int64, fullName string, seenAt time.Time) error
 	SeenActor(ctx context.Context, actorID int64, login string, seenAt time.Time) error
 
-	// HID-native signal helpers (preferred internally).
+	// HID-native signal helpers (preferred internally)
 	SeenRepoHID(ctx context.Context, repoHID []byte, fullName string, seenAt time.Time) error
 	SeenActorHID(ctx context.Context, actorHID []byte, login string, seenAt time.Time) error
 
-	// Queue leasing for workers with best-effort reservation semantics (HID keyed).
+	// Queue leasing for workers with best-effort reservation semantics (HID keyed)
 	LeaseRepos(ctx context.Context, n int, leaseFor time.Duration) ([]domain.Job, error)
 	LeaseActors(ctx context.Context, n int, leaseFor time.Duration) ([]domain.ActorJob, error)
 
-	// Queue completion with retry backoff (numeric wrappers + HID-native).
+	// Queue completion with retry backoff (numeric wrappers + HID-native)
 	AckRepo(ctx context.Context, repoID int64) error
 	NackRepo(ctx context.Context, repoID int64, backoff time.Duration, lastErr string) error
 	AckActor(ctx context.Context, actorID int64) error
@@ -38,7 +38,7 @@ type Repo interface {
 	AckActorHID(ctx context.Context, actorHID []byte) error
 	NackActorHID(ctx context.Context, actorHID []byte, backoff time.Duration, lastErr string) error
 
-	// Metadata upserts after successful fetches from GitHub (numeric wrappers + HID-native).
+	// Metadata upserts after successful fetches from GitHub (numeric wrappers + HID-native)
 	UpsertRepository(ctx context.Context, r domain.RepositoryRecord) error
 	UpsertRepositoryHID(ctx context.Context, repoHID []byte, r domain.RepositoryRecord) error
 	TouchRepository304(ctx context.Context, repoID int64, nextRefreshAt time.Time, etag string) error
@@ -48,13 +48,13 @@ type Repo interface {
 	TouchActor304(ctx context.Context, actorID int64, nextRefreshAt time.Time, etag string) error
 	TouchActor304HID(ctx context.Context, actorHID []byte, nextRefreshAt time.Time, etag string) error
 
-	// Seed/refresh helpers to fill queues in bulk (all HID in SQL, numeric sentinels OK).
+	// Seed/refresh helpers to fill queues in bulk (all HID in SQL, numeric sentinels OK)
 	EnqueueMissingReposFromUtterances(ctx context.Context, since, until time.Time, limit int) (int, error)
 	EnqueueMissingActorsFromUtterances(ctx context.Context, since, until time.Time, limit int) (int, error)
 	EnqueueDueRepos(ctx context.Context, since, until time.Time, limit int) (int, error)
 	EnqueueDueActors(ctx context.Context, since, until time.Time, limit int) (int, error)
 
-	// Hints to avoid unnecessary fetches (numeric wrappers + HID-native).
+	// Hints to avoid unnecessary fetches (numeric wrappers + HID-native)
 	RepoHints(
 		ctx context.Context,
 		repoID int64,
@@ -78,13 +78,13 @@ type Repo interface {
 		err error,
 	)
 
-	// Cadence inputs for next_refresh_at (numeric wrappers + HID-native).
+	// Cadence inputs for next_refresh_at (numeric wrappers + HID-native)
 	RepoCadenceInputs(ctx context.Context, repoID int64) (int, *time.Time, error)
 	RepoCadenceInputsHID(ctx context.Context, repoHID []byte) (int, *time.Time, error)
 	ActorCadenceInputs(ctx context.Context, actorID int64) (int, error)
 	ActorCadenceInputsHID(ctx context.Context, actorHID []byte) (int, error)
 
-	// Read-side helpers for primary and per-actor language stats.
+	// Read-side helpers for primary and per-actor language stats
 	PrimaryLanguageOfRepo(ctx context.Context, repoID int64) (string, bool, error)
 	LanguagesOfRepo(ctx context.Context, repoID int64) (map[string]int64, bool, error)
 	PrimaryLanguageOfActor(ctx context.Context, actorID int64, w domain.LangWindow) (string, bool, error)
@@ -102,18 +102,18 @@ type Repo interface {
 }
 
 type (
-	// PG is a Postgres hallmonitor repository.
+	// PG is a Postgres hallmonitor repository
 	PG      struct{}
 	queries struct{ q repokit.Queryer }
 )
 
-// NewPG constructs a Postgres hallmonitor repository.
+// NewPG constructs a Postgres hallmonitor repository
 func NewPG() repokit.Binder[Repo] { return PG{} }
 
-// Bind binds a Queryer to a Postgres implementation of Repo.
+// Bind binds a Queryer to a Postgres implementation of Repo
 func (PG) Bind(q repokit.Queryer) Repo { return &queries{q: q} }
 
-// HID derivation (must match ingest/backfill).
+// HID derivation (must match ingest/backfill)
 func makeRepoHID(repoID int64) []byte {
 	h := sha256.Sum256([]byte("repo:" + strconv.FormatInt(repoID, 10)))
 	return h[:]
@@ -124,35 +124,35 @@ func makeActorHID(actorID int64) []byte {
 	return h[:]
 }
 
-// === Signals =================================================================
+// --- Signals ---------------------------------------------------------------
 
 func (r *queries) SeenRepo(ctx context.Context, repoID int64, fullName string, seenAt time.Time) error {
 	return r.SeenRepoHID(ctx, makeRepoHID(repoID), fullName, seenAt)
 }
 
-// Ensure minimal principal + enqueue (no ident.* writes here).
+// Ensure minimal principal + enqueue (no ident.* writes here)
 func (r *queries) SeenRepoHID(ctx context.Context, repoHID []byte, fullName string, seenAt time.Time) error {
-	// Skip enqueue if explicitly denied; principal row still allowed.
+	// Skip enqueue if explicitly denied; principal row still allowed
 	const denySQL = `SELECT EXISTS (SELECT 1 FROM active_deny_repos WHERE principal_hid=$1)`
 	var denied bool
 	if err := r.q.QueryRow(ctx, denySQL, repoHID).Scan(&denied); err != nil {
 		return err
 	}
-	// Ensure principal (idempotent).
+	// Ensure principal (idempotent)
 	if _, err := r.q.Exec(ctx,
 		`INSERT INTO principals_repos (repo_hid) VALUES ($1) ON CONFLICT DO NOTHING`,
 		repoHID,
 	); err != nil {
 		return fmt.Errorf("ensure principals_repos: %w", err)
 	}
-	// If we know a friendly label, set it; guarded by CHECK(can_expose_repo(...)).
+	// If we know a friendly label, set it; guarded by CHECK(can_expose_repo(...))
 	if fullName != "" {
 		_, _ = r.q.Exec(ctx, `UPDATE principals_repos SET _label_explicit = $2 WHERE repo_hid = $1`, repoHID, fullName)
 	}
 	if denied {
 		return nil
 	}
-	// Enqueue.
+	// Enqueue
 	_, err := r.q.Exec(ctx, `
 		INSERT INTO repo_catalog_queue (repo_hid, priority, next_attempt_at, enqueued_at)
 		VALUES ($1, 0, now(), now())
@@ -310,13 +310,13 @@ func (r *queries) NackActorHID(ctx context.Context, actorHID []byte, backoff tim
 	return err
 }
 
-// === Upserts (consent-aware, HID-native core) ===============================
+// --- Upserts (consent-aware, HID-native core) --------------------------------
 
 func (r *queries) UpsertRepository(ctx context.Context, rec domain.RepositoryRecord) error {
 	return r.UpsertRepositoryHID(ctx, makeRepoHID(rec.RepoID), rec)
 }
 
-// HID-keyed facts; PII gated by consent, non-PII always.
+// UpsertRepositoryHID upserts a repository record using repo_hid
 func (r *queries) UpsertRepositoryHID(ctx context.Context, repoHID []byte, rec domain.RepositoryRecord) error {
 	// Ensure principal exists (idempotent)
 	if _, err := r.q.Exec(ctx,
@@ -508,7 +508,7 @@ func (r *queries) TouchActor304HID(ctx context.Context, actorHID []byte, nextRef
 	return err
 }
 
-// === Enqueue (bulk seed/refresh) =============================================
+// --- Enqueue (bulk seed/refresh) ---------------------------------------------
 
 func (r *queries) EnqueueMissingReposFromUtterances(
 	ctx context.Context,

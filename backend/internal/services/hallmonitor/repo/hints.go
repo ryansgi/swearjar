@@ -14,7 +14,7 @@ func nullI16Ptr(n sql.NullInt16) *int16 {
 	return nil
 }
 
-// --- Repo hints --------------------------------------------------------------
+// Repo hints
 
 func (r *queries) RepoHints(ctx context.Context, repoID int64) (*string, *string, bool, *int16, *string, error) {
 	return r.RepoHintsHID(ctx, makeRepoHID(repoID))
@@ -45,7 +45,7 @@ func (r *queries) RepoHintsHID(ctx context.Context, repoHID []byte) (*string, *s
 	return nullStrPtr(fn), nullStrPtr(et), gone, nullI16Ptr(gc), nullStrPtr(gr), nil
 }
 
-// --- Actor hints -------------------------------------------------------------
+// Actor hints
 
 func (r *queries) ActorHints(ctx context.Context, actorID int64) (*string, *string, bool, *int16, *string, error) {
 	return r.ActorHintsHID(ctx, makeActorHID(actorID))
