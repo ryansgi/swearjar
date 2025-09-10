@@ -148,7 +148,7 @@ func (rd *Reader) Stats() (events int, bytes int64) {
 }
 
 // truncateUTF8 returns a string made from b, truncated to at most max bytes,
-// backing up to a UTF-8 boundary if needed, and appending an ellipsis if truncated.
+// backing up to a UTF-8 boundary if needed, and appending an ellipsis if truncated
 func truncateUTF8(b []byte, max int) string {
 	if max <= 0 || len(b) <= max {
 		return string(b)

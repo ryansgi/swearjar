@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// HourRef identifies a GH Archive hour (UTC).
+// HourRef identifies a GH Archive hour (UTC)
 type HourRef struct {
 	Year  int
 	Month int
@@ -32,7 +32,7 @@ func fmtHour(y, m, d, h int) string {
 }
 
 // EventEnvelope is the outer event format GH Archive stores per line.
-// We keep only the fields we need for extraction; Payload is raw for type-specific decode.
+// We keep only the fields we need for extraction; Payload is raw for type-specific decode
 type EventEnvelope struct {
 	ID        string          `json:"id"`
 	Type      string          `json:"type"`
