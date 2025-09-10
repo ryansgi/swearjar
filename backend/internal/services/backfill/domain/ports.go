@@ -19,13 +19,6 @@ type StorageRepo interface {
 	// FinishHour marks the end of a backfill hour
 	FinishHour(ctx context.Context, hour time.Time, fin HourFinish) error
 
-	// EnsurePrincipalsAndMaps ensures principals and mapping rows for the given HIDs.
-	// The maps are from HID ([32]byte) to internal numeric ID (int64)
-	// It is safe to call with empty maps (no-ops)
-	// It is safe to call concurrently (with different maps)
-	// It is recommended to limit concurrency to avoid DB overload
-	EnsurePrincipalsAndMaps(ctx context.Context, repos map[[32]byte]int64, actors map[[32]byte]int64) error
-
 	// InsertUtterances inserts utterances in bulk, returning counts of inserted and deduped rows.
 	// It is safe to call with an empty slice (no-op)
 	// It is recommended to batch inserts (e.g. 1000s of rows) for performance
