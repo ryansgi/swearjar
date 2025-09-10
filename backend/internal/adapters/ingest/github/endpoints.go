@@ -115,3 +115,71 @@ func (c *Client) userCommon(ctx context.Context, path, etag string) (User, strin
 	}
 	return out, resp.Header.Get("ETag"), false, nil
 }
+
+// RepoContent returns html_url (when a file) or empty when 404/missing
+func (c *Client) RepoContent(ctx context.Context, owner, repo, path, ref, etag string) (string, string, bool, error) {
+	p := fmt.Sprintf("/repos/%s/%s/contents/%s?ref=%s", owner, repo, path, ref)
+	resp, err := c.Do(ctx, http.MethodGet, p, etag)
+	if err != nil {
+		return "", "", false, err
+	}
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			c.log.Error().Err(cerr).Str("path", p).Msg("github close body failed")
+		}
+	}()
+	if resp.StatusCode == http.StatusNotModified {
+		return "", resp.Header.Get("ETag"), true, nil
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return "", resp.Header.Get("ETag"), false, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", "", false, &GHStatusError{Status: resp.StatusCode, Err: fmt.Errorf("contents %d", resp.StatusCode)}
+	}
+	var out struct {
+		HTMLURL string `json:"html_url"`
+		Type    string `json:"type"`
+	}
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err := json.Unmarshal(b, &out); err != nil {
+		return "", "", false, err
+	}
+	if out.Type != "file" && out.Type != "symlink" {
+		return "", resp.Header.Get("ETag"), false, nil
+	}
+	return out.HTMLURL, resp.Header.Get("ETag"), false, nil
+}
+
+// ListPublicGists returns a page of gists for a user.
+// NOTE (2025): Many callers now receive 401 when unauthenticated.
+// We therefore use the authenticated Do() path (Bearer PAT)
+func (c *Client) ListPublicGists(
+	ctx context.Context,
+	user string,
+	page, perPage int,
+	etag string,
+) ([]map[string]any, string, bool, error) {
+	p := fmt.Sprintf("/users/%s/gists?per_page=%d&page=%d", user, perPage, page)
+	resp, err := c.Do(ctx, http.MethodGet, p, etag)
+	if err != nil {
+		return nil, "", false, err
+	}
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			c.log.Error().Err(cerr).Str("path", p).Msg("github close body failed")
+		}
+	}()
+	if resp.StatusCode == http.StatusNotModified {
+		return nil, resp.Header.Get("ETag"), true, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", false, &GHStatusError{Status: resp.StatusCode, Err: fmt.Errorf("gists %d", resp.StatusCode)}
+	}
+	var out []map[string]any
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	if err := json.Unmarshal(b, &out); err != nil {
+		return nil, "", false, err
+	}
+	return out, resp.Header.Get("ETag"), false, nil
+}
