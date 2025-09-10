@@ -20,9 +20,9 @@ type PageOpts struct {
 // NOTE: min_severity uses DB enum values: mild|strong|slur_masked
 type ByLangInput struct {
 	Range       TimeRange `json:"range"`
-	Repo        string    `json:"repo,omitempty" validate:"omitempty,regex=^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" example:"golang/go"`
+	Repo        string    `json:"repo,omitempty" validate:"omitempty,regex=^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" example:"golang/go"` //nolint:lll
 	Lang        string    `json:"lang,omitempty" validate:"omitempty,regex=^[A-Za-z-]{2,10}$" example:"en"`
-	MinSeverity string    `json:"min_severity,omitempty" validate:"omitempty,oneof=mild strong slur_masked" example:"mild"`
+	MinSeverity string    `json:"min_severity,omitempty" validate:"omitempty,oneof=mild strong slur_masked" example:"mild"` //nolint:lll
 }
 
 // ByLangRow is a daily bucket of hits and utterances by language
@@ -48,7 +48,7 @@ type ByRepoRow struct {
 // ByCategoryInput buckets by category and severity (optional repo filter)
 type ByCategoryInput struct {
 	Range TimeRange `json:"range"`
-	Repo  string    `json:"repo,omitempty" validate:"omitempty,regex=^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" example:"golang/go"`
+	Repo  string    `json:"repo,omitempty" validate:"omitempty,regex=^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" example:"golang/go"` //nolint:lll
 }
 
 // ByCategoryRow is a bucket of hits by category and severity
