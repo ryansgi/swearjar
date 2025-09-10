@@ -124,7 +124,7 @@ func main() {
 		}
 
 	case "backfill":
-		// Seed queues from historical utterances within a window, then exit.
+		// Seed queues from historical utterances within a window, then exit
 		since := parseWhen("since", *fSince)
 		until := parseWhen("until", *fUntil)
 		if since.IsZero() {
