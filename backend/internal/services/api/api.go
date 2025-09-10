@@ -12,10 +12,13 @@ import (
 	"swearjar/internal/modkit/module"
 	"swearjar/internal/modkit/swaggerkit"
 
-	bouncermod "swearjar/internal/services/api/bouncer/module"
+	apibouncer "swearjar/internal/services/api/bouncer/module"
 	metamod "swearjar/internal/services/api/meta/module"
 	samplesmod "swearjar/internal/services/api/samples/module"
 	statsmod "swearjar/internal/services/api/stats/module"
+
+	// Worker bouncer module (owns the Enqueuer port)
+	workerbouncer "swearjar/internal/services/bouncer/module"
 )
 
 // Options are the API options
@@ -35,11 +38,25 @@ func Mount(r phttp.Router, opt Options) {
 		PG:  opt.Store.PG,
 	}
 
+	// Construct the WORKER bouncer module first and extract its Enqueuer port
+	wbOpts := workerbouncer.FromConfig(deps.Cfg) // <- Options required by worker module
+	workerBouncer := workerbouncer.New(deps, wbOpts)
+	enq := module.MustPortsOf[workerbouncer.Ports](workerBouncer).Enqueuer
+
+	// Inject that Enqueuer into the API bouncer module
+	apiBouncer := apibouncer.New(
+		deps,
+		modkit.WithPorts(apibouncer.Ports{
+			Enqueuer: enq,
+		}),
+	)
+
 	mods := []module.Module{
 		metamod.New(deps),
 		statsmod.New(deps),
 		samplesmod.New(deps),
-		bouncermod.New(deps),
+		workerBouncer, // include worker so its ports are registered
+		apiBouncer,    // API module that depends on the worker's Enqueuer
 	}
 
 	// versioned API with a common middleware stack
