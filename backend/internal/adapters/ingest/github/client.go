@@ -19,6 +19,8 @@ const (
 	defaultUA        = "swearjar-hallmonitor"
 	defaultMaxRetry  = 5
 	defaultRetryBase = 500 * time.Millisecond
+
+	apiVersion = "2022-11-28" // keep in sync with GitHub REST docs
 )
 
 // Options configures the Client
@@ -85,7 +87,19 @@ func NewClient(o Options) *Client {
 	}
 }
 
-// nextIndex returns the next round-robin index starting from current cursor.
+// Do issues an authenticated request with token rotation, etag & retry logic.
+// etagIn is optional and adds If-None-Match for conditional requests
+func (c *Client) Do(ctx context.Context, method, path string, etagIn string) (*http.Response, error) {
+	return c.do(ctx, method, path, etagIn, true)
+}
+
+// DoPublic issues a request WITHOUT an Authorization header.
+// Kept for endpoints that truly allow anonymous access
+func (c *Client) DoPublic(ctx context.Context, method, path string, etagIn string) (*http.Response, error) {
+	return c.do(ctx, method, path, etagIn, false)
+}
+
+// nextIndex returns the next round-robin index starting from current cursor
 func (c *Client) nextIndex() int {
 	if len(c.tokens) == 0 {
 		return -1
@@ -106,7 +120,7 @@ func (c *Client) getToken(now time.Time) (tok string, idx int) {
 		return "", -1
 	}
 
-	// Try up to N tokens to find one with quota or already reset.
+	// Try up to N tokens to find one with quota or already reset
 	start := c.nextIndex()
 	i := start
 	for range n {
@@ -125,9 +139,8 @@ func (c *Client) getToken(now time.Time) (tok string, idx int) {
 	return c.tokens[start], start
 }
 
-// Do issues a request with auth headers, etag, retries, and rate limit handling
-// etagIn is optional and adds If-None-Match for conditional requests
-func (c *Client) Do(ctx context.Context, method, path string, etagIn string) (*http.Response, error) {
+// do is the shared request path; when useAuth=false, no Authorization header is set
+func (c *Client) do(ctx context.Context, method, path string, etagIn string, useAuth bool) (*http.Response, error) {
 	url := c.opts.BaseURL + path
 	attempts := 0
 	for {
@@ -143,12 +156,18 @@ func (c *Client) Do(ctx context.Context, method, path string, etagIn string) (*h
 		}
 		req.Header.Set("User-Agent", c.opts.UserAgent)
 		req.Header.Set("Accept", "application/vnd.github+json")
+		req.Header.Set("X-GitHub-Api-Version", apiVersion)
 		if etagIn != "" {
 			req.Header.Set("If-None-Match", etagIn)
 		}
-		tok, tokIdx := c.getToken(c.now())
-		if tok != "" {
-			req.Header.Set("Authorization", "token "+tok)
+
+		var tokIdx int = -1
+		if useAuth {
+			if tok, idx := c.getToken(c.now()); tok != "" {
+				// Use Bearer for both classic and fine-grained PATs
+				req.Header.Set("Authorization", "Bearer "+tok)
+				tokIdx = idx
+			}
 		}
 
 		start := c.now()
@@ -160,7 +179,8 @@ func (c *Client) Do(ctx context.Context, method, path string, etagIn string) (*h
 				return nil, perr.Wrapf(err, perr.ErrorCodeUnavailable, "github do failed")
 			}
 			back := c.backoff(attempts)
-			c.log.Warn().Dur("retry_in", back).Int("attempt", attempts).Msg("github transport error retrying")
+			c.log.Warn().Dur("retry_in", back).Int("attempt", attempts).Bool("auth", useAuth).
+				Msg("github transport error retrying")
 			c.sleep(back)
 			attempts++
 			continue
@@ -168,7 +188,7 @@ func (c *Client) Do(ctx context.Context, method, path string, etagIn string) (*h
 
 		// Always log lightweight response metadata
 		rem, reset, retryAfter := parseRateHeaders(resp.Header)
-		if tokIdx >= 0 && tokIdx < len(c.state) {
+		if useAuth && tokIdx >= 0 && tokIdx < len(c.state) {
 			// Only update if header was present; leave zero-values alone otherwise
 			if rem >= 0 {
 				c.state[tokIdx] = tokenState{remaining: rem, reset: reset}
@@ -183,16 +203,15 @@ func (c *Client) Do(ctx context.Context, method, path string, etagIn string) (*h
 			Int("rate_remaining", rem).
 			Time("rate_reset", reset).
 			Int("retry_after_s", retryAfter).
+			Bool("auth", useAuth).
 			Msg("github http response")
 
 		switch resp.StatusCode {
-		case http.StatusOK, http.StatusCreated, http.StatusAccepted:
-			return resp, nil
-		case http.StatusNotModified:
+		case http.StatusOK, http.StatusCreated, http.StatusAccepted, http.StatusNotModified:
 			return resp, nil
 
 		case http.StatusTooManyRequests, http.StatusForbidden:
-			// Respect Retry-After / X-RateLimit-Reset; when exhausted, return typed status error.
+			// Respect Retry-After / X-RateLimit-Reset
 			wait := computeWait(rem, reset, retryAfter, c.now())
 			if wait <= 0 {
 				wait = c.backoff(attempts)
@@ -206,7 +225,7 @@ func (c *Client) Do(ctx context.Context, method, path string, etagIn string) (*h
 					Err:    perr.Newf(perr.ErrorCodeTooManyRequests, "github rate limited"),
 				}
 			}
-			c.log.Warn().Dur("sleep", wait).Msg("github rate limited backing off")
+			c.log.Warn().Dur("sleep", wait).Bool("auth", useAuth).Msg("github rate limited backing off")
 			_ = drainAndClose(resp.Body)
 			c.sleep(wait)
 			attempts++
@@ -224,14 +243,15 @@ func (c *Client) Do(ctx context.Context, method, path string, etagIn string) (*h
 				}
 			}
 			back := c.backoff(attempts)
-			c.log.Warn().Dur("retry_in", back).Int("attempt", attempts).Msg("github transient error retrying")
+			c.log.Warn().Dur("retry_in", back).Int("attempt", attempts).Bool("auth", useAuth).
+				Msg("github transient error retrying")
 			_ = drainAndClose(resp.Body)
 			c.sleep(back)
 			attempts++
 			continue
 
 		default:
-			// Non-2xx/3xx (404/410/451/etc.); return GHStatusError so worker can tombstone.
+			// Non-2xx/3xx (404/410/451/401/etc.)
 			body := readSmall(resp.Body)
 			_ = resp.Body.Close()
 			return nil, &GHStatusError{
@@ -243,7 +263,7 @@ func (c *Client) Do(ctx context.Context, method, path string, etagIn string) (*h
 	}
 }
 
-// mapPerrCode maps HTTP status to platform error codes for easier policy handling.
+// mapPerrCode maps HTTP status to platform error codes for easier policy handling
 func mapPerrCode(status int) perr.ErrorCode {
 	switch status {
 	case 404:
@@ -265,7 +285,7 @@ func mapPerrCode(status int) perr.ErrorCode {
 	}
 }
 
-// readSmall reads a small tail for diagnostics (kept separate from drainAndClose for reuse).
+// readSmall reads a small tail for diagnostics (kept separate from drainAndClose for reuse)
 func readSmall(rc io.ReadCloser) string {
 	b, _ := io.ReadAll(io.LimitReader(rc, 2048))
 	// avoid logging newlines/control chars in single-line logs
