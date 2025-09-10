@@ -31,6 +31,7 @@ type Utterance struct {
 	Script         string // optional; empty => NULL
 }
 
+// FromEvent extracts utterances from a GitHub event envelope
 func FromEvent(env gharchive.EventEnvelope, norm Normalizer) []Utterance {
 	var outs []Utterance
 
