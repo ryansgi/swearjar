@@ -138,7 +138,8 @@ func (r *fakeRows) Scan(dest ...any) error {
 			continue
 		}
 		// string -> []byte
-		if s, ok := row[i].(string); ok && dv.Elem().Kind() == reflect.Slice && dv.Elem().Type().Elem().Kind() == reflect.Uint8 {
+		if s, ok := row[i].(string); ok && dv.Elem().Kind() == reflect.Slice &&
+			dv.Elem().Type().Elem().Kind() == reflect.Uint8 {
 			dv.Elem().SetBytes([]byte(s))
 			continue
 		}

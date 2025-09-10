@@ -1,6 +1,6 @@
 // Package detector scans normalized text using a rulepack. It prioritizes
 // template regex matches, then falls back to lemma multi-pattern search.
-// Inputs must be normalized (see internal/normalize).
+// Inputs must be normalized (see internal/normalize)
 package detector
 
 import (
@@ -10,7 +10,7 @@ import (
 	"swearjar/internal/core/rulepack"
 )
 
-// Source indicates which rule type triggered the hit.
+// Source indicates which rule type triggered the hit
 type Source string
 
 const (
@@ -22,7 +22,7 @@ const (
 )
 
 // Hit describes a detection occurrence. Spans are [start,end) byte offsets
-// in the *normalized* input string.
+// in the *normalized* input string
 type Hit struct {
 	Term            string
 	Category        string
@@ -32,26 +32,26 @@ type Hit struct {
 	DetectorVersion int
 }
 
-// Detector holds compiled rules and version.
+// Detector holds compiled rules and version
 type Detector struct {
 	p       *rulepack.Pack
 	version int
 }
 
-// New constructs a detector for the given rule pack and version stamp.
+// New constructs a detector for the given rule pack and version stamp
 func New(p *rulepack.Pack, detectorVersion int) *Detector {
 	return &Detector{p: p, version: detectorVersion}
 }
 
 // Scan runs template matches first, then lemma backstop. It returns merged hits
-// (same term/category/severity/source are combined; spans are appended).
+// (same term/category/severity/source are combined; spans are appended)
 func (d *Detector) Scan(norm string) []Hit {
 	var hits []Hit
 	if norm == "" {
 		return hits
 	}
 
-	// Templates (regex). Emit one hit per match with the matched text as term.
+	// Templates (regex). Emit one hit per match with the matched text as term
 	for i, re := range d.p.Compiled {
 		idxs := re.FindAllStringIndex(norm, -1)
 		if len(idxs) == 0 {
@@ -71,7 +71,7 @@ func (d *Detector) Scan(norm string) []Hit {
 	}
 
 	// Lemmas (multi-substring search with conservative boundaries).
-	// We avoid heavy deps initially; can swap to AC later under this loop.
+	// We avoid heavy deps initially; can swap to AC later under this loop
 	for _, lm := range d.p.Lemmas {
 		needle := lm.Term
 		for off := 0; off < len(norm); {
@@ -82,7 +82,7 @@ func (d *Detector) Scan(norm string) []Hit {
 			start := off + i
 			end := start + len(needle)
 
-			// Word-boundary check: letters/digits must not continue on either side.
+			// Word-boundary check: letters/digits must not continue on either side
 			if d.boundaryOK(norm, start, end) && !d.inStoplist(norm, start, end) {
 				hits = append(hits, Hit{
 					Term:            needle,
@@ -101,14 +101,14 @@ func (d *Detector) Scan(norm string) []Hit {
 	return mergeHits(hits)
 }
 
-// indexUnsafe is a simple byte-level substring search; inputs are normalized lowercase.
+// indexUnsafe is a simple byte-level substring search; inputs are normalized lowercase
 func indexUnsafe(haystack, needle string) int {
 	// naive search; stdlib strings.Index is fine too, but we inline to keep
 	// control on offsets
 	return indexKMP(haystack, needle)
 }
 
-// boundaryOK ensures rune-wise word boundaries around [start,end).
+// boundaryOK ensures rune-wise word boundaries around [start,end)
 func (d *Detector) boundaryOK(s string, start, end int) bool {
 	var prev, next rune
 	if start > 0 {
@@ -130,7 +130,7 @@ func isWord(r rune) bool {
 }
 
 // inStoplist checks if the matched window sits wholly within any stoplist word.
-// We do a minimal check: expand to the containing token and see if token is stoplisted.
+// We do a minimal check: expand to the containing token and see if token is stoplisted
 func (d *Detector) inStoplist(s string, start, end int) bool {
 	ls, rs := start, end
 	for ls > 0 {

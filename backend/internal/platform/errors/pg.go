@@ -27,7 +27,7 @@ const (
 	pgErrCannotConnectNow       = "57P03" // i.e. startup in progress
 )
 
-// ExtractPgError returns (*pgconn.PgError, true) if the root cause is a PgError.
+// ExtractPgError returns (*pgconn.PgError, true) if the root cause is a PgError
 func ExtractPgError(err error) (*pgconn.PgError, bool) {
 	var pgErr *pgconn.PgError
 	if stderrs.As(Root(err), &pgErr) {
@@ -42,7 +42,7 @@ func IsSQLState(err error, code string) bool {
 	return ok && pgErr.Code == code
 }
 
-// Human-friendly predicates for common constraint classes.
+// Human-friendly predicates for common constraint classes
 
 // IsDuplicateKey reports whether the error is a unique constraint violation
 func IsDuplicateKey(err error) bool { return IsSQLState(err, pgErrUniqueViolation) }

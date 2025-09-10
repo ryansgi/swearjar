@@ -8,6 +8,7 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// QueryEvent describes a single SQL query execution
 type QueryEvent struct {
 	SQL       string
 	Args      any
@@ -16,6 +17,7 @@ type QueryEvent struct {
 	Slow      bool
 }
 
+// QueryTracer receives query events
 type QueryTracer interface {
 	OnQuery(ctx context.Context, ev QueryEvent)
 }
@@ -30,7 +32,7 @@ func Tracer(root logger.Logger) QueryTracer {
 type zlTracer struct{ log logger.Logger }
 
 func (z *zlTracer) OnQuery(_ context.Context, ev QueryEvent) {
-	// log normal queries at Info so they’re visible even if someone changes .Level above
+	// log normal queries at Info so they're visible even if someone changes .Level above
 	elapsedMs := float64(ev.ElapsedUS) / 1000.0
 	evt := z.log.Info()
 	if ev.Slow {

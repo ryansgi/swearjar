@@ -71,7 +71,7 @@ func SQLNullPtr(ps *string) any {
 	return *ps
 }
 
-// Deref returns "" if ps is nil, else *ps.
+// Deref returns "" if ps is nil, else *ps
 func Deref(ps *string) string {
 	if ps == nil {
 		return ""

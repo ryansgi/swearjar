@@ -3,7 +3,11 @@ package store
 import "context"
 
 // RunInTenant wraps ctx with tenant and calls fn inside the provided TxRunner
-func RunInTenant(ctx context.Context, tx TxRunner, tenantID string, fn func(ctx context.Context, q RowQuerier) error) error {
+func RunInTenant(ctx context.Context, tx TxRunner, tenantID string, fn func(
+	ctx context.Context,
+	q RowQuerier,
+) error,
+) error {
 	ctx = WithTenant(ctx, tenantID)
 	return tx.Tx(ctx, func(q RowQuerier) error {
 		return fn(ctx, q)

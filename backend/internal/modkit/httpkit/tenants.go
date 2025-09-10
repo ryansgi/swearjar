@@ -6,7 +6,7 @@ import (
 	pnet "swearjar/internal/platform/net"
 )
 
-// TenancyPort validates tenant context. Stub until we wire a real service.
+// TenancyPort validates tenant context. Stub until we wire a real service
 type TenancyPort interface {
 	Validate(r *http.Request, tenantID string) error
 }

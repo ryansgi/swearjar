@@ -90,7 +90,7 @@ func TestOpenPG_BackoffThenCancel(t *testing.T) {
 		t.Fatalf("expected nil TxRunner when parent deadline hits, got %T", txr)
 	}
 
-	// We should have slept at least once (~150ms), so give a safe lower bound.
+	// We should have slept at least once (~150ms), so give a safe lower bound
 	if elapsed < 140*time.Millisecond {
 		t.Fatalf("expected at least one backoff sleep (~150ms), got %v", elapsed)
 	}

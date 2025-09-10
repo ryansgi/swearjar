@@ -24,7 +24,7 @@ func TestHTTPStatus(t *testing.T) {
 			name: "generic error -> perr mapping (expect 5xx)",
 			err:  errors.New("boom"),
 			// if perr maps generic errors to 500, assert 500 directly.
-			// otherwise keep this flexible and assert 5xx below.
+			// otherwise keep this flexible and assert 5xx below
 			want: 0, // special: we'll assert range
 		},
 		{

@@ -1,5 +1,5 @@
 // Package rulepack loads and compiles detection rules. It embeds a small JSON
-// file (rules.json) and prepares regex templates and lemma sets for the detector.
+// file (rules.json) and prepares regex templates and lemma sets for the detector
 package rulepack
 
 import (
@@ -35,7 +35,7 @@ type rawLemma struct {
 	Severity int    `json:"severity"`
 }
 
-// Pack represents a compiled rule pack for the detector.
+// Pack represents a compiled rule pack for the detector
 type Pack struct {
 	Version int
 
@@ -47,21 +47,21 @@ type Pack struct {
 	LemmaSet map[string]Lemma // lowercased term -> lemma meta
 }
 
-// Template represents a compiled regex template rule.
+// Template represents a compiled regex template rule
 type Template struct {
 	PatternExpanded string
 	Category        string
 	Severity        int
 }
 
-// Lemma represents a substring rule.
+// Lemma represents a substring rule
 type Lemma struct {
 	Term     string
 	Category string
 	Severity int
 }
 
-// Load returns the compiled pack from the embedded rules.json.
+// Load returns the compiled pack from the embedded rules.json
 func Load() (*Pack, error) {
 	var rp rawPack
 	if err := json.Unmarshal(embedded, &rp); err != nil {
@@ -89,7 +89,7 @@ func Load() (*Pack, error) {
 		}
 		// We assume inputs are normalized+folded, so patterns should be plain lowercase.
 		// Add simple boundaries: we prefer matching across word-ish delimiters in text,
-		// not code identifiers. Keep conservative.
+		// not code identifiers. Keep conservative
 		re, err := regexp.Compile(exp)
 		if err != nil {
 			return nil, fmt.Errorf("rulepack: compile %q: %w", exp, err)
@@ -143,14 +143,14 @@ func expandSlots(pattern string, slots map[string][]string) (string, error) {
 		}
 		j := strings.Index(out[i:], "}")
 		if j < 0 {
-			// Unbalanced; treat literally.
+			// Unbalanced; treat literally
 			break
 		}
 		j = i + j
 		name := out[i+1 : j]
 		values, ok := slots[name]
 		if !ok || len(values) == 0 {
-			// Leave as-is if slot unknown, to make debugging obvious.
+			// Leave as-is if slot unknown, to make debugging obvious
 			out = out[:i] + "{" + name + "}" + out[j+1:]
 			// Move past this occurrence to avoid infinite loop
 			k := strings.Index(out[j+1:], "{")
@@ -174,6 +174,6 @@ func expandSlots(pattern string, slots map[string][]string) (string, error) {
 		group := "(?:" + strings.Join(parts, "|") + ")"
 		out = out[:i] + group + out[j+1:]
 	}
-	// We do not add anchors; author controls them in patterns.
+	// We do not add anchors; author controls them in patterns
 	return strings.ToLower(out), nil
 }

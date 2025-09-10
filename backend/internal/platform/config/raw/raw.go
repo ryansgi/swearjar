@@ -1,5 +1,5 @@
 // Package raw provides a minimal env reader used during bootstrap.
-// It intentionally has NO dependency on the logger package to avoid import cycles.
+// It intentionally has NO dependency on the logger package to avoid import cycles
 package raw
 
 import (

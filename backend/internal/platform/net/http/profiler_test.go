@@ -36,7 +36,7 @@ func TestMountProfiler_Enabled(t *testing.T) {
 	r.Mux().ServeHTTP(rec0, req0)
 
 	// Profiler mux typically redirects the prefix root to /pprof/ (301/308),
-	// depending on stdlib/chi behavior. Either redirect or 404 is fine here.
+	// depending on stdlib/chi behavior. Either redirect or 404 is fine here
 	if rec0.Code != http.StatusMovedPermanently &&
 		rec0.Code != http.StatusPermanentRedirect &&
 		rec0.Code != http.StatusNotFound {

@@ -12,7 +12,7 @@ import (
 )
 
 // Conf is a namespaced view over environment variables (e.g., "API_", "PG_")
-// Use New("") for global access, or Prefix("API_") for module scopes.
+// Use New("") for global access, or Prefix("API_") for module scopes
 type Conf struct{ prefix string }
 
 // New creates a root Conf (no prefix)
@@ -90,7 +90,7 @@ func (c Conf) MustPort(key string) string {
 	return ":" + s
 }
 
-// Require ensures that all given keys are present (non-empty). Panics otherwise.
+// Require ensures that all given keys are present (non-empty). Panics otherwise
 func (c Conf) Require(keys ...string) {
 	for _, k := range keys {
 		if strings.TrimSpace(os.Getenv(c.key(k))) == "" {
@@ -180,7 +180,7 @@ func (c Conf) MayCSV(key string, def []string) []string {
 	return out
 }
 
-// MayEnum ensures value is one of allowed; returns def if empty; panics if invalid.
+// MayEnum ensures value is one of allowed; returns def if empty; panics if invalid
 func (c Conf) MayEnum(key, def string, allowed ...string) string {
 	v := c.MayString(key, def)
 	if v == "" {

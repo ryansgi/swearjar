@@ -1,12 +1,12 @@
-// Package langhint provides language and script detection utilities.
+// Package langhint provides language and script detection utilities
 package langhint
 
 import (
 	"unicode"
 )
 
-// DetectScriptAndLang returns a coarse script name (always) and a best-effort BCP-47 lang code
-// Lang is only set if letterCount >= minLetters and the script -> language mapping is strong.
+// DetectScriptAndLang returns a coarse script name (always) and a best-effort BCP-47 lang code.
+// Lang is only set if letterCount >= minLetters and the script -> language mapping is strong
 func DetectScriptAndLang(s string) (script string, lang string) {
 	const minLetters = 20
 
@@ -88,7 +88,7 @@ func DetectScriptAndLang(s string) (script string, lang string) {
 		script = ""
 	}
 
-	// Only emit lang when we have enough letters and the mapping is strong/low-ambiguity.
+	// Only emit lang when we have enough letters and the mapping is strong/low-ambiguity
 	if totalLetters >= minLetters {
 		switch {
 		// Japanese: presence of Hiragana or Katakana is decisive

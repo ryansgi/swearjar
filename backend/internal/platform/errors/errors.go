@@ -175,12 +175,12 @@ func CodeOf(err error) ErrorCode {
 func IsCode(err error, code ErrorCode) bool { return CodeOf(err) == code }
 
 // HTTPStatus returns the mapped HTTP status for any error
-// If the error implements HTTPStatus() int, that wins.
+// If the error implements HTTPStatus() int, that wins
 func HTTPStatus(err error) int {
 	if err == nil {
 		return http.StatusOK
 	}
-	// If a wrapped error exposes an HTTP status directly, use it.
+	// If a wrapped error exposes an HTTP status directly, use it
 	type httpStatusProvider interface{ HTTPStatus() int }
 	var hsp httpStatusProvider
 	if stderrs.As(err, &hsp) {
@@ -306,5 +306,5 @@ func HTTP(err error) (int, Wire) {
 // Retry semantics
 
 // Retryable reports whether the error is retryable. Delegates to backend-specific logic.
-// Currently backed by Postgres helpers in pg.go (IsRetryable), and can be extended.
+// Currently backed by Postgres helpers in pg.go (IsRetryable), and can be extended
 func Retryable(err error) bool { return IsRetryable(err) }

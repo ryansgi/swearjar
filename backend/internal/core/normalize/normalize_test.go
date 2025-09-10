@@ -1,11 +1,10 @@
-// internal/normalize/normalize_test.go
 package normalize
 
 import (
 	"testing"
 )
 
-// Test table covers each stage and combined pipelines.
+// Test table covers each stage and combined pipelines
 func TestNormalize_Table(t *testing.T) {
 	n := New()
 
@@ -87,7 +86,7 @@ func TestNormalize_Table(t *testing.T) {
 	}
 }
 
-// Spot-check internal helpers in isolation.
+// Spot-check internal helpers in isolation
 func TestLeetFold(t *testing.T) {
 	in := "4b0u7 !$ 3l337"
 	want := "about is e llet"

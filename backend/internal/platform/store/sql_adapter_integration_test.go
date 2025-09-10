@@ -7,10 +7,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"swearjar/internal/platform/logger"
 	"testing"
 	"time"
-
-	"swearjar/internal/platform/logger"
 
 	"github.com/rs/zerolog"
 	tc "github.com/testcontainers/testcontainers-go"

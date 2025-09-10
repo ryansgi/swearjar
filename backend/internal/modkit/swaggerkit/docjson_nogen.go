@@ -1,5 +1,6 @@
 //go:build !swag
 
+// Package swaggerkit provides OpenAPI swagger UI integration for HTTP services
 package swaggerkit
 
 import "net/http"

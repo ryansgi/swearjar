@@ -13,7 +13,7 @@ import (
 // It also drops invalid UTF-8 bytes.
 // Fast path returns s unchanged when no cleaning is needed.
 // Honestly, there's probably a library that does this, but this is straightforward enough
-// and we want to avoid dependencies in this package if possible.
+// and we want to avoid dependencies in this package if possible
 func Sanitize(s string) string {
 	if s == "" {
 		return s
@@ -53,7 +53,7 @@ func Sanitize(s string) string {
 		return s // nothing to clean
 	}
 
-	// Slow path: build cleaned string from here on.
+	// Slow path: build cleaned string from here on
 	var bldr strings.Builder
 	bldr.Grow(n)
 	bldr.WriteString(s[:i]) // keep clean prefix
