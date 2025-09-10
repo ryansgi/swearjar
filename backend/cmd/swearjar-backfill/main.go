@@ -101,7 +101,7 @@ func main() {
 			}),
 		)
 
-		// Register deps first so other modules can resolve ports if they need to.
+		// Register deps first so other modules can resolve ports if they need to
 		module.Register(ut.Name(), ut.Ports())
 		module.Register(hm.Name(), hm.Ports())
 		module.Register(dm.Name(), dm.Ports())
