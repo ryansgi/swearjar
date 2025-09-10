@@ -2,7 +2,7 @@ package ingest
 
 import "swearjar/internal/services/backfill/domain"
 
-// Normalizer wraps a core normalizer to satisfy domain.Normalizer.
+// Normalizer wraps a core normalizer to satisfy domain.Normalizer
 type normalizer struct {
 	inner interface{ Normalize(string) string }
 }

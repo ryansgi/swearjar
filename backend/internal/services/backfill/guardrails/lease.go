@@ -9,7 +9,7 @@ import (
 	"swearjar/internal/platform/store"
 )
 
-// ErrLeaseHeld signals another worker owns the hour already.
+// ErrLeaseHeld signals another worker owns the hour already
 var ErrLeaseHeld = errors.New("backfill: hour lease already held")
 
 // MakeAdvisoryLease returns a function that uses Postgres to
@@ -19,7 +19,7 @@ var ErrLeaseHeld = errors.New("backfill: hour lease already held")
 // It does not attempt to release the lease; it's a one-time claim.
 // This is a simple way to avoid multiple workers processing the same hour
 // when running multiple backfill instances concurrently.
-// It assumes the ingest_hours_leases table exists.
+// It assumes the ingest_hours_leases table exists
 func MakeAdvisoryLease(
 	deps modkit.Deps,
 ) func(ctx context.Context, hour time.Time, do func(context.Context) error) error {

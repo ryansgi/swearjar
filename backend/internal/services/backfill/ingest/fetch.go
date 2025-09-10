@@ -1,4 +1,4 @@
-// Package ingest holds adapter shims for backfill ingest ports.
+// Package ingest holds adapter shims for backfill ingest ports
 package ingest
 
 import (
