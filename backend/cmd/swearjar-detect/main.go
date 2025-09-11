@@ -37,9 +37,11 @@ func main() {
 			Enabled: false,
 		},
 		CH: store.CHConfig{
-			Enabled: true,
-			URL:     chCfg.MustString("DBURL"),
-			LogSQL:  chCfg.MayBool("LOG_SQL", true),
+			Enabled:    true,
+			URL:        chCfg.MustString("DBURL"),
+			LogSQL:     chCfg.MayBool("LOG_SQL", true),
+			ClientName: "swearjar",
+			ClientTag:  "detect",
 		},
 	}, store.WithLogger(*l))
 	if err != nil {

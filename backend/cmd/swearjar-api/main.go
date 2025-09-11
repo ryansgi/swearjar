@@ -37,8 +37,10 @@ func main() {
 				LogSQL:      pgCfg.MayBool("LOG_SQL", true),
 			},
 			CH: store.CHConfig{
-				Enabled: true,
-				URL:     chCfg.MustString("DBURL"),
+				Enabled:    true,
+				URL:        chCfg.MustString("DBURL"),
+				ClientName: "swearjar",
+				ClientTag:  "api",
 			},
 		},
 		store.WithLogger(*logger.Get()),
