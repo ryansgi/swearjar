@@ -43,6 +43,7 @@ func main() {
 		CH: store.CHConfig{
 			Enabled: true,
 			URL:     chCfg.MustString("DBURL"),
+			LogSQL:  chCfg.MayBool("LOG_SQL", true),
 		},
 	}, store.WithLogger(*l))
 	if err != nil {

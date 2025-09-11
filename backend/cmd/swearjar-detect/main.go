@@ -29,21 +29,17 @@ func mustSetEnv(k, v string) {
 
 func main() {
 	root := config.New()
-	pgCfg := root.Prefix("SERVICE_PGSQL_")
 	chCfg := root.Prefix("SERVICE_CLICKHOUSE_")
 	l := logger.Get()
 
 	st, err := store.Open(context.Background(), store.Config{
 		PG: store.PGConfig{
-			Enabled:     true,
-			URL:         pgCfg.MustString("DBURL"),
-			MaxConns:    int32(pgCfg.MayInt("MAX_CONNS", 4)),
-			SlowQueryMs: pgCfg.MayInt("SLOW_MS", 500),
-			LogSQL:      pgCfg.MayBool("LOG_SQL", true),
+			Enabled: false,
 		},
 		CH: store.CHConfig{
 			Enabled: true,
 			URL:     chCfg.MustString("DBURL"),
+			LogSQL:  chCfg.MayBool("LOG_SQL", true),
 		},
 	}, store.WithLogger(*l))
 	if err != nil {
@@ -88,7 +84,7 @@ func main() {
 
 	deps := modkit.Deps{
 		Cfg: root,
-		PG:  st.PG,
+		CH:  st.CH,
 		Log: *l,
 	}
 
