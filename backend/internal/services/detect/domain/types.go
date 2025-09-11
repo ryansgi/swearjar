@@ -24,24 +24,3 @@ type WriteInput struct {
 	ActorHID  []byte
 	LangCode  *string
 }
-
-// Utterance is the minimal row we need to evaluate
-type Utterance struct {
-	ID             int64
-	TextNormalized string // may be empty
-	TextRaw        string // used to compute norm if TextNorm empty
-	CommittedAt    time.Time
-	LangCode       *string
-}
-
-// Hit is the row we persist
-type Hit struct {
-	UtteranceID     int64
-	Term            string
-	Category        string
-	Severity        int
-	StartOffset     int
-	EndOffset       int
-	DetectorVersion int
-	LangCode        *string
-}

@@ -99,7 +99,6 @@ func (s *hybridStore) InsertUtterances(ctx context.Context, us []domain.Utteranc
 
 	rows := make([][]any, 0, len(batch))
 	for _, u := range batch {
-		// domain.HID32 -> domain.HID (slice) -> []byte (driver expects raw bytes)
 		repoRaw := []byte(identdom.RepoHID32(u.RepoID).Bytes())    // []byte, len=32
 		actorRaw := []byte(identdom.ActorHID32(u.ActorID).Bytes()) // []byte, len=32
 
@@ -120,11 +119,11 @@ func (s *hybridStore) InsertUtterances(ctx context.Context, us []domain.Utteranc
 			u.CreatedAt.UTC(),      // created_at (DateTime64(3))
 			coerceSource(u.Source), // source (Enum8) - string ok
 			zeroIfEmpty(u.SourceDetail, u.Source),
-			u.Ordinal, // ordinal
-			u.TextRaw, // text_raw
-			norm,      // text_normalized (Nullable(String))
-			0,         // ingest_batch_id
-			0,         // ver
+			int32(u.Ordinal), // ordinal (Int32)
+			u.TextRaw,        // text_raw
+			norm,             // text_normalized (Nullable(String))
+			0,                // ingest_batch_id
+			0,                // ver
 		}
 		rows = append(rows, row)
 	}
@@ -132,7 +131,7 @@ func (s *hybridStore) InsertUtterances(ctx context.Context, us []domain.Utteranc
 	if err := s.ch.Insert(ctx, tableWithCols, rows); err != nil {
 		return 0, 0, err
 	}
-	return len(rows), 0, nil // dedupe handled later by ReplacingMergeTree
+	return len(rows), 0, nil
 }
 
 // LookupIDs resolves (event_id, source, ordinal) -> (id, lang_code) from CH
@@ -164,31 +163,30 @@ func (s *hybridStore) LookupIDs(ctx context.Context, keys []domain.UKey) (map[do
 
 	for rows.Next() {
 		var ev, src, id string
-		var ord int
+		var ord32 int32
 		var lang *string
-		if err := rows.Scan(&ev, &src, &ord, &id, &lang); err != nil {
+		if err := rows.Scan(&ev, &src, &ord32, &id, &lang); err != nil {
 			return nil, err
 		}
-		out[domain.UKey{EventID: ev, Source: src, Ordinal: ord}] = domain.LookupRow{
+		out[domain.UKey{EventID: ev, Source: src, Ordinal: int(ord32)}] = domain.LookupRow{
 			ID: id, LangCode: lang,
 		}
 	}
 	return out, rows.Err()
 }
 
-// --- helpers ---
 func esc(s string) string {
 	s = strings.ReplaceAll(s, `\`, `\\`)
 	s = strings.ReplaceAll(s, `'`, `\'`)
 	return s
 }
 
-func escNullable(s *string) (string, bool) {
-	if s == nil {
-		return "", true
-	}
-	return esc(*s), false
-}
+// func escNullable(s *string) (string, bool) {
+// 	if s == nil {
+// 		return "", true
+// 	}
+// 	return esc(*s), false
+// }
 
 func zeroIfEmpty(v, fb string) string {
 	if v == "" {

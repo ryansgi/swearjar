@@ -236,8 +236,6 @@ func (s *Svc) runActorLoop(ctx context.Context, batch int, leaseFor time.Duratio
 	}
 }
 
-// --- Error handling (HID variants) -------------------------------------------
-
 func (s *Svc) handleRepoErrorHID(ctx context.Context, repoHID []byte, attempts int, err error) {
 	// Terminal? -> tombstone + ACK (no more hot retries)
 	if term, code, reason := classifyTerminal(err); term {

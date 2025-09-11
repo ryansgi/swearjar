@@ -3,89 +3,103 @@ package repo
 
 import (
 	"context"
-	"fmt"
-	"strings"
+	"time"
 
-	"swearjar/internal/modkit/repokit"
-	"swearjar/internal/services/utterances/domain"
+	"swearjar/internal/platform/store"
+	utdom "swearjar/internal/services/utterances/domain"
 )
 
-type binder struct{}
-
-// NewPG constructs a new repo binder for Postgres
-func NewPG() repokit.Binder[Storage] { return binder{} }
-
-// Bind implements repokit.Binder
-func (binder) Bind(q repokit.Queryer) Storage { return &pg{q: q} }
-
-// Storage defines the utterances repository
-type Storage interface {
-	List(ctx context.Context, in domain.ListInput, hardLimit int) ([]domain.Row, domain.AfterKey, error)
+// CH implements a ClickHouse-backed reader
+type CH struct {
+	ch store.Clickhouse
 }
 
-type pg struct{ q repokit.Queryer }
+// NewCH returns a CH-backed utterances repository
+func NewCH(ch store.Clickhouse) *CH { return &CH{ch: ch} }
 
-// List implements Storage
-func (s *pg) List(ctx context.Context, in domain.ListInput, hardLimit int) ([]domain.Row, domain.AfterKey, error) {
-	// Dynamic WHERE with numbered args
-	var sb strings.Builder
-	var args []any
-	arg := func(v any) string { args = append(args, v); return fmt.Sprintf("$%d", len(args)) }
-
-	sb.WriteString(`
-		SELECT
-			u.id::text,
-			u.created_at,
-			u.repo_name,
-			u.repo_id,
-			u.repo_hid,
-			u.actor_login,
-			u.actor_id,
-			u.actor_hid,
-			u.source::text,
-			u.source_detail,
-			u.lang_code,
-			u.script,
-			COALESCE(u.text_normalized, '') AS text_norm
-		FROM utterances u
-		WHERE u.created_at >= ` + arg(in.Since) + ` AND u.created_at < ` + arg(in.Until) + `
-			AND NOT EXISTS (SELECT 1 FROM active_deny_repos r WHERE r.principal_hid = u.repo_hid)
-			AND NOT EXISTS (SELECT 1 FROM active_deny_actors a WHERE a.principal_hid = u.actor_hid)
-	`)
-
-	// Keyset only when AfterKey is set (avoid ""::uuid on first page)
-	if in.After.ID != "" {
-		sb.WriteString("  AND (u.created_at, u.id) > (" + arg(in.After.CreatedAt) + ", " + arg(in.After.ID) + "::uuid)\n")
+// List returns up to hardLimit rows ordered by (created_at, id)
+// Notes:
+//   - CH schema does not contain repo_name/repo_id/actor_login/actor_id yet; we return zero values.
+//   - Filters depending on those fields are ignored for now.
+//   - LangCode filter is supported
+func (r *CH) List(ctx context.Context, in utdom.ListInput, hardLimit int) ([]utdom.Row, utdom.AfterKey, error) {
+	afterID := in.After.ID
+	if afterID == "" {
+		afterID = "00000000-0000-0000-0000-000000000000"
+	}
+	afterT := in.After.CreatedAt
+	if afterT.IsZero() {
+		// allow rows at the boundary
+		afterT = in.Since.Add(-time.Nanosecond)
 	}
 
-	if in.RepoName != "" {
-		sb.WriteString("  AND u.repo_name = " + arg(in.RepoName) + "\n")
+	// Base query (selects only what exists in CH schema; zero-fill the rest)
+	q := `
+SELECT
+  toString(id)                             AS id,
+  created_at                               AS created_at,
+  ''                                       AS repo_name,   -- not present in CH (zero-fill)
+  toInt64(0)                                AS repo_id,     -- not present in CH (zero-fill)
+  repo_hid                                  AS repo_hid,
+  ''                                       AS actor_login, -- not present in CH (zero-fill)
+  toInt64(0)                                AS actor_id,    -- not present in CH (zero-fill)
+  actor_hid                                 AS actor_hid,
+  source                                    AS source,
+  source_detail                             AS source_detail,
+  lang_code                                 AS lang_code,
+  lang_script                               AS script,
+  coalesce(text_normalized, '')             AS text_norm
+FROM swearjar.utterances
+WHERE created_at >= ? AND created_at < ?
+  AND ((created_at > ?) OR (created_at = ? AND id > toUUID(?)))
+`
+
+	args := []any{
+		in.Since.UTC(), in.Until.UTC(),
+		afterT.UTC(), afterT.UTC(), afterID,
 	}
+
+	// Filters we can currently support
 	if in.LangCode != "" {
-		sb.WriteString("  AND u.lang_code = " + arg(in.LangCode) + "\n")
+		q += "  AND lang_code = ?\n"
+		args = append(args, in.LangCode)
 	}
 
-	sb.WriteString("ORDER BY u.created_at, u.id\nLIMIT " + arg(hardLimit))
+	// (RepoName/Owner/RepoID/ActorID filters are ignored for now
 
-	rows, err := s.q.Query(ctx, sb.String(), args...)
+	q += "ORDER BY created_at, id\nLIMIT ?"
+	args = append(args, hardLimit)
+
+	rows, err := r.ch.Query(ctx, q, args...)
 	if err != nil {
-		return nil, domain.AfterKey{}, err
+		return nil, utdom.AfterKey{}, err
 	}
 	defer rows.Close()
 
-	out := make([]domain.Row, 0, hardLimit)
-	var last domain.AfterKey
+	out := make([]utdom.Row, 0, hardLimit)
+	var last utdom.AfterKey
+
 	for rows.Next() {
-		var r domain.Row
+		var rrow utdom.Row
 		if err := rows.Scan(
-			&r.ID, &r.CreatedAt, &r.RepoName, &r.RepoID, &r.RepoHID,
-			&r.ActorLogin, &r.ActorID, &r.ActorHID,
-			&r.Source, &r.SourceDetail, &r.LangCode, &r.Script, &r.TextNorm,
+			&rrow.ID,
+			&rrow.CreatedAt,
+			&rrow.RepoName,
+			&rrow.RepoID,
+			&rrow.RepoHID,
+			&rrow.ActorLogin,
+			&rrow.ActorID,
+			&rrow.ActorHID,
+			&rrow.Source,
+			&rrow.SourceDetail,
+			&rrow.LangCode,
+			&rrow.Script,
+			&rrow.TextNorm,
 		); err != nil {
-			return nil, domain.AfterKey{}, err
+			return nil, utdom.AfterKey{}, err
 		}
-		out = append(out, r)
-		last = domain.AfterKey{CreatedAt: r.CreatedAt, ID: r.ID}
+		out = append(out, rrow)
+		last = utdom.AfterKey{CreatedAt: rrow.CreatedAt, ID: rrow.ID}
 	}
 	return out, last, rows.Err()
 }

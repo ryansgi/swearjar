@@ -4,7 +4,6 @@ package module
 import (
 	"swearjar/internal/modkit"
 	"swearjar/internal/modkit/httpkit"
-	"swearjar/internal/modkit/repokit"
 	"swearjar/internal/services/hits/domain"
 	"swearjar/internal/services/hits/repo"
 	"swearjar/internal/services/hits/service"
@@ -16,7 +15,7 @@ type Ports struct {
 	Query  domain.QueryPort
 }
 
-// Module implements the hits service module
+// Module implements the hits module
 type Module struct {
 	deps  modkit.Deps
 	ports Ports
@@ -24,12 +23,13 @@ type Module struct {
 
 // New constructs a new hits module
 func New(deps modkit.Deps) *Module {
+	if deps.CH == nil {
+		panic("hits module requires ClickHouse (deps.CH nil)")
+	}
 	opts := FromConfig(deps.Cfg)
 
-	binder := repo.NewPG()
-	svc := service.New(repokit.TxRunner(deps.PG), binder, service.Config{
-		HardLimit: opts.HardLimit,
-	})
+	storage := repo.NewCH(deps.CH)
+	svc := service.New(storage, service.Config{HardLimit: opts.HardLimit})
 
 	m := &Module{deps: deps}
 	m.ports = Ports{
@@ -49,4 +49,4 @@ func (m *Module) Ports() any { return m.ports }
 func (m *Module) Prefix() string { return "" }
 
 // MountRoutes satisfies modkit.Module
-func (m *Module) MountRoutes(r httpkit.Router) {}
+func (m *Module) MountRoutes(_ httpkit.Router) {}

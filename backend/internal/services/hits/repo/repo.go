@@ -1,269 +1,290 @@
-// Package repo provides the hits repository implementation
+// Package repo provides the ClickHouse implementation for the hits service
 package repo
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
-	"swearjar/internal/modkit/repokit"
-	"swearjar/internal/services/hits/domain"
+	"swearjar/internal/platform/store"
+	dom "swearjar/internal/services/hits/domain"
 )
 
-type (
-	pg     struct{ q repokit.Queryer }
-	binder struct{}
-)
-
-// NewPG constructs a new repo binder for Postgres
-func NewPG() repokit.Binder[Storage] { return binder{} }
-
-// Bind implements repokit.Binder
-func (binder) Bind(q repokit.Queryer) Storage { return &pg{q: q} }
-
-// Storage defines the hits repository
-type Storage interface {
-	WriteBatch(ctx context.Context, xs []domain.HitWrite) error
-	ListSamples(
-		ctx context.Context,
-		w domain.Window,
-		f domain.Filters,
-		after domain.AfterKey,
-		limit int,
-	) ([]domain.Sample, domain.AfterKey, error)
-	AggByLang(ctx context.Context, w domain.Window, f domain.Filters) ([]domain.AggByLangRow, error)
-	AggByRepo(ctx context.Context, w domain.Window, f domain.Filters, limit int) ([]domain.AggByRepoRow, error)
-	AggByCategory(ctx context.Context, w domain.Window, f domain.Filters) ([]domain.AggByCategoryRow, error)
+// CH implements the hits repo with ClickHouse
+type CH struct {
+	ch store.Clickhouse
 }
 
-// WriteBatch implements Storage
-func (s *pg) WriteBatch(ctx context.Context, xs []domain.HitWrite) error {
+// NewCH constructs a new hits repo with a required CH instance
+func NewCH(ch store.Clickhouse) *CH { return &CH{ch: ch} }
+
+// WriteBatch inserts hits into swearjar.hits using a column list
+func (r *CH) WriteBatch(ctx context.Context, xs []dom.HitWrite) error {
 	if len(xs) == 0 {
 		return nil
 	}
 
-	var sb strings.Builder
-	sb.WriteString(`INSERT INTO hits
-		(utterance_id, created_at, term, category, severity, span_start, span_end,
-		detector_version, source, repo_hid, actor_hid, lang_code) VALUES `)
+	const table = "swearjar.hits (" +
+		"utterance_id, created_at, source, repo_hid, actor_hid, " +
+		"lang_code, term, category, severity, span_start, span_end, detector_version, " +
+		"ingest_batch_id, ver" +
+		")"
 
-	args := make([]any, 0, len(xs)*12)
-	for i, h := range xs {
-		if i > 0 {
-			sb.WriteByte(',')
+	rows := make([][]any, 0, len(xs))
+	for _, h := range xs {
+		var lang any
+		if h.LangCode == "" {
+			lang = nil
+		} else {
+			lang = h.LangCode
 		}
-		base := i*12 + 1
-		fmt.Fprintf(&sb, "($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)",
-			base, base+1, base+2, base+3, base+4, base+5,
-			base+6, base+7, base+8, base+9, base+10, base+11)
 
-		args = append(args,
-			h.UtteranceID, h.CreatedAt, h.Term, h.Category, h.Severity,
-			h.SpanStart, h.SpanEnd, h.DetectorVersion, h.Source,
-			h.RepoHID, h.ActorHID, h.LangCode,
-		)
+		rows = append(rows, []any{
+			h.UtteranceID,      // UUID (String OK)
+			h.CreatedAt.UTC(),  // DateTime64(3)
+			h.Source,           // Enum8 string
+			[]byte(h.RepoHID),  // FixedString(32)
+			[]byte(h.ActorHID), // FixedString(32)
+			lang,               // Nullable(String)
+			h.Term,             // String
+			h.Category,         // Enum8 string
+			h.Severity,         // Enum8 string
+			h.SpanStart,        // Int32
+			h.SpanEnd,          // Int32
+			h.DetectorVersion,  // Int32
+			0,                  // ingest_batch_id
+			0,                  // ver (ReplacingMergeTree)
+		})
 	}
-	// Idempotent for same detector_version & span
-	sb.WriteString(` ON CONFLICT (utterance_id, term, span_start, span_end, detector_version) DO NOTHING`)
-	_, err := s.q.Exec(ctx, sb.String(), args...)
-	return err
+
+	return r.ch.Insert(ctx, table, rows)
 }
 
-func (s *pg) ListSamples(
+// ListSamples returns hits joined with utterances with keyset pagination.
+// Keyset: (u.created_at, u.id) > (after.CreatedAt, toUUID(after.UtteranceID))
+func (r *CH) ListSamples(
 	ctx context.Context,
-	w domain.Window,
-	f domain.Filters,
-	after domain.AfterKey,
+	w dom.Window,
+	f dom.Filters,
+	after dom.AfterKey,
 	limit int,
-) ([]domain.Sample, domain.AfterKey, error) {
-	var sb strings.Builder
-	var args []any
-	arg := func(v any) string { args = append(args, v); return fmt.Sprintf("$%d", len(args)) }
+) ([]dom.Sample, dom.AfterKey, error) {
+	// Build WHERE with optional filters
+	q := `
+	SELECT
+	  toString(h.utterance_id)  AS utterance_id,
+	  u.created_at,
+	  u.repo_name,
+	  u.lang_code,
+	  u.source,
+	  h.term, h.category, h.severity, h.span_start, h.span_end
+	FROM swearjar.hits AS h
+	INNER JOIN swearjar.utterances AS u ON u.id = h.utterance_id
+	WHERE u.created_at >= ? AND u.created_at < ?
+	  AND ((u.created_at > ?) OR (u.created_at = ? AND h.utterance_id > toUUID(?)))
+	`
 
-	sb.WriteString(`
-		SELECT
-			h.utterance_id::text,
-			u.created_at,
-			u.repo_name,
-			u.lang_code,
-			u.source::text,
-			h.term, h.category::text, h.severity::text, h.span_start, h.span_end
-		FROM hits h
-		JOIN utterances u ON u.id = h.utterance_id
-		WHERE u.created_at >= ` + arg(w.Since) + ` AND u.created_at < ` + arg(w.Until) + `
-			AND NOT EXISTS (SELECT 1 FROM active_deny_repos r WHERE r.principal_hid = u.repo_hid)
-			AND NOT EXISTS (SELECT 1 FROM active_deny_actors a WHERE a.principal_hid = u.actor_hid)
-	`)
-	// Keyset only when AfterKey is set (avoid ""::uuid on first page)
-	if after.UtteranceID != "" {
-		sb.WriteString(
-			"  AND (u.created_at, u.id) > (" +
-				arg(after.CreatedAt) + ", " +
-				arg(after.UtteranceID) + "::uuid)\n",
-		)
+	args := []any{
+		w.Since.UTC(), w.Until.UTC(),
+		after.CreatedAt.UTC(), after.CreatedAt.UTC(),
+		coalesce(after.UtteranceID, "00000000-0000-0000-0000-000000000000"),
 	}
 
+	// Filters
 	if f.RepoName != "" {
-		sb.WriteString("  AND u.repo_name = " + arg(f.RepoName) + "\n")
+		q += "  AND u.repo_name = ?\n"
+		args = append(args, f.RepoName)
 	}
 	if f.Owner != "" {
-		sb.WriteString("  AND split_part(u.repo_name, '/', 1) = " + arg(f.Owner) + "\n")
+		// split path 'owner/repo', CH arrays are 1-based
+		q += "  AND splitByChar('/', u.repo_name)[1] = ?\n"
+		args = append(args, f.Owner)
 	}
 	if f.LangCode != "" {
-		sb.WriteString("  AND u.lang_code = " + arg(f.LangCode) + "\n")
+		q += "  AND u.lang_code = ?\n"
+		args = append(args, f.LangCode)
 	}
 	if f.Category != "" {
-		sb.WriteString("  AND h.category = " + arg(f.Category) + "::hit_category_enum\n")
+		q += "  AND h.category = ?\n"
+		args = append(args, f.Category)
 	}
 	if f.Severity != "" {
-		sb.WriteString("  AND h.severity = " + arg(f.Severity) + "::hit_severity_enum\n")
+		q += "  AND h.severity = ?\n"
+		args = append(args, f.Severity)
 	}
 	if f.Version != nil {
-		sb.WriteString("  AND h.detector_version = " + arg(*f.Version) + "\n")
+		q += "  AND h.detector_version = ?\n"
+		args = append(args, *f.Version)
 	}
 
-	sb.WriteString("ORDER BY u.created_at, u.id, h.span_start\nLIMIT " + arg(limit))
+	q += "ORDER BY u.created_at, h.utterance_id, h.span_start\nLIMIT ?"
+	args = append(args, limit)
 
-	rows, err := s.q.Query(ctx, sb.String(), args...)
+	rows, err := r.ch.Query(ctx, q, args...)
 	if err != nil {
-		return nil, domain.AfterKey{}, err
+		return nil, dom.AfterKey{}, err
 	}
 	defer rows.Close()
 
-	out := make([]domain.Sample, 0, limit)
-	var last domain.AfterKey
+	out := make([]dom.Sample, 0, limit)
+	var last dom.AfterKey
 	for rows.Next() {
-		var srow domain.Sample
+		var s dom.Sample
+		var spanStart, spanEnd int32
+
 		if err := rows.Scan(
-			&srow.UtteranceID, &srow.CreatedAt, &srow.RepoName, &srow.LangCode, &srow.Source,
-			&srow.Term, &srow.Category, &srow.Severity, &srow.SpanStart, &srow.SpanEnd,
+			&s.UtteranceID,
+			&s.CreatedAt,
+			&s.RepoName,
+			&s.LangCode,
+			&s.Source,
+			&s.Term,
+			&s.Category,
+			&s.Severity,
+			&spanStart,
+			&spanEnd,
 		); err != nil {
-			return nil, domain.AfterKey{}, err
+			return nil, dom.AfterKey{}, err
 		}
-		out = append(out, srow)
-		last = domain.AfterKey{CreatedAt: srow.CreatedAt, UtteranceID: srow.UtteranceID}
+
+		s.SpanStart = int(spanStart)
+		s.SpanEnd = int(spanEnd)
+
+		out = append(out, s)
+		last = dom.AfterKey{CreatedAt: s.CreatedAt, UtteranceID: s.UtteranceID}
 	}
 	return out, last, rows.Err()
 }
 
-// AggByLang implements Storage
-func (s *pg) AggByLang(ctx context.Context, w domain.Window, f domain.Filters) ([]domain.AggByLangRow, error) {
-	var sb strings.Builder
-	var args []any
-	arg := func(v any) string { args = append(args, v); return fmt.Sprintf("$%d", len(args)) }
+// AggByLang implements domain.QueryPort
+func (r *CH) AggByLang(ctx context.Context, w dom.Window, f dom.Filters) ([]dom.AggByLangRow, error) {
+	q := `
+	SELECT
+	  toStartOfDay(u.created_at) AS day,
+	  u.lang_code,
+	  count() AS hits,
+	  h.detector_version
+	FROM swearjar.hits AS h
+	INNER JOIN swearjar.utterances AS u ON u.id = h.utterance_id
+	WHERE u.created_at >= ? AND u.created_at < ?
+	`
+	args := []any{w.Since.UTC(), w.Until.UTC()}
 
-	sb.WriteString(`
-		SELECT date_trunc('day', u.created_at) AS day, u.lang_code, COUNT(*) AS hits, h.detector_version
-		FROM hits h
-		JOIN utterances u ON u.id = h.utterance_id
-		WHERE u.created_at >= ` + arg(w.Since) + ` AND u.created_at < ` + arg(w.Until) + `
-			AND NOT EXISTS (SELECT 1 FROM active_deny_repos r WHERE r.principal_hid = u.repo_hid)
-			AND NOT EXISTS (SELECT 1 FROM active_deny_actors a WHERE a.principal_hid = u.actor_hid)
-	`)
 	if f.LangCode != "" {
-		sb.WriteString("  AND u.lang_code = " + arg(f.LangCode) + "\n")
+		q += "  AND u.lang_code = ?\n"
+		args = append(args, f.LangCode)
 	}
 	if f.Version != nil {
-		sb.WriteString("  AND h.detector_version = " + arg(*f.Version) + "\n")
+		q += "  AND h.detector_version = ?\n"
+		args = append(args, *f.Version)
 	}
-	sb.WriteString("GROUP BY day, u.lang_code, h.detector_version ORDER BY day ASC")
+	q += "GROUP BY day, u.lang_code, h.detector_version\nORDER BY day ASC"
 
-	rows, err := s.q.Query(ctx, sb.String(), args...)
+	rows, err := r.ch.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var out []domain.AggByLangRow
+	var out []dom.AggByLangRow
 	for rows.Next() {
-		var r domain.AggByLangRow
-		if err := rows.Scan(&r.Day, &r.LangCode, &r.Hits, &r.DetectorVersion); err != nil {
+		var rrow dom.AggByLangRow
+		var detVer int32
+
+		if err := rows.Scan(
+			&rrow.Day,
+			&rrow.LangCode,
+			&rrow.Hits,
+			&detVer,
+		); err != nil {
 			return nil, err
 		}
-		out = append(out, r)
+		rrow.DetectorVersion = int(detVer)
+		out = append(out, rrow)
 	}
 	return out, rows.Err()
 }
 
-// AggByRepo implements Storage
-func (s *pg) AggByRepo(
+// AggByRepo implements domain.QueryPort
+func (r *CH) AggByRepo(
 	ctx context.Context,
-	w domain.Window,
-	f domain.Filters,
+	w dom.Window,
+	f dom.Filters,
 	limit int,
-) ([]domain.AggByRepoRow, error) {
-	var sb strings.Builder
-	var args []any
-	arg := func(v any) string { args = append(args, v); return fmt.Sprintf("$%d", len(args)) }
-
-	sb.WriteString(`
-		SELECT u.repo_name, COUNT(*) AS hits
-		FROM hits h
-		JOIN utterances u ON u.id = h.utterance_id
-		WHERE u.created_at >= ` + arg(w.Since) + ` AND u.created_at < ` + arg(w.Until) + `
-			AND NOT EXISTS (SELECT 1 FROM active_deny_repos r WHERE r.principal_hid = u.repo_hid)
-			AND NOT EXISTS (SELECT 1 FROM active_deny_actors a WHERE a.principal_hid = u.actor_hid)
-	`)
+) ([]dom.AggByRepoRow, error) {
+	q := `
+	SELECT u.repo_name, count() AS hits
+	FROM swearjar.hits AS h
+	INNER JOIN swearjar.utterances AS u ON u.id = h.utterance_id
+	WHERE u.created_at >= ? AND u.created_at < ?
+	`
+	args := []any{w.Since.UTC(), w.Until.UTC()}
 	if f.Owner != "" {
-		sb.WriteString("  AND split_part(u.repo_name, '/', 1) = " + arg(f.Owner) + "\n")
+		q += "  AND splitByChar('/', u.repo_name)[1] = ?\n"
+		args = append(args, f.Owner)
 	}
 	if f.Version != nil {
-		sb.WriteString("  AND h.detector_version = " + arg(*f.Version) + "\n")
+		q += "  AND h.detector_version = ?\n"
+		args = append(args, *f.Version)
 	}
-	sb.WriteString("GROUP BY u.repo_name ORDER BY hits DESC, u.repo_name ASC LIMIT " + arg(limit))
+	q += "GROUP BY u.repo_name\nORDER BY hits DESC, u.repo_name ASC\nLIMIT ?"
+	args = append(args, limit)
 
-	rows, err := s.q.Query(ctx, sb.String(), args...)
+	rows, err := r.ch.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var out []domain.AggByRepoRow
+	var out []dom.AggByRepoRow
 	for rows.Next() {
-		var r domain.AggByRepoRow
-		if err := rows.Scan(&r.RepoName, &r.Hits); err != nil {
+		var rrow dom.AggByRepoRow
+		if err := rows.Scan(&rrow.RepoName, &rrow.Hits); err != nil {
 			return nil, err
 		}
-		out = append(out, r)
+		out = append(out, rrow)
 	}
 	return out, rows.Err()
 }
 
-// AggByCategory implements Storage
-func (s *pg) AggByCategory(ctx context.Context, w domain.Window, f domain.Filters) ([]domain.AggByCategoryRow, error) {
-	var sb strings.Builder
-	var args []any
-	arg := func(v any) string { args = append(args, v); return fmt.Sprintf("$%d", len(args)) }
-
-	sb.WriteString(`
-	SELECT h.category::text, h.severity::text, COUNT(*) AS hits
-	FROM hits h
-	JOIN utterances u ON u.id = h.utterance_id
-	WHERE u.created_at >= ` + arg(w.Since) + ` AND u.created_at < ` + arg(w.Until) + `
-		AND NOT EXISTS (SELECT 1 FROM active_deny_repos r WHERE r.principal_hid = u.repo_hid)
-		AND NOT EXISTS (SELECT 1 FROM active_deny_actors a WHERE a.principal_hid = u.actor_hid)
-	`)
+// AggByCategory implements domain.QueryPort
+func (r *CH) AggByCategory(ctx context.Context, w dom.Window, f dom.Filters) ([]dom.AggByCategoryRow, error) {
+	q := `
+	SELECT h.category, h.severity, count() AS hits
+	FROM swearjar.hits AS h
+	INNER JOIN swearjar.utterances AS u ON u.id = h.utterance_id
+	WHERE u.created_at >= ? AND u.created_at < ?
+	`
+	args := []any{w.Since.UTC(), w.Until.UTC()}
 	if f.Category != "" {
-		sb.WriteString("  AND h.category = " + arg(f.Category) + "::hit_category_enum\n")
+		q += "  AND h.category = ?\n"
+		args = append(args, f.Category)
 	}
 	if f.Version != nil {
-		sb.WriteString("  AND h.detector_version = " + arg(*f.Version) + "\n")
+		q += "  AND h.detector_version = ?\n"
+		args = append(args, *f.Version)
 	}
-	sb.WriteString("GROUP BY h.category, h.severity ORDER BY h.category, h.severity")
+	q += "GROUP BY h.category, h.severity\nORDER BY h.category, h.severity"
 
-	rows, err := s.q.Query(ctx, sb.String(), args...)
+	rows, err := r.ch.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var out []domain.AggByCategoryRow
+	var out []dom.AggByCategoryRow
 	for rows.Next() {
-		var r domain.AggByCategoryRow
-		if err := rows.Scan(&r.Category, &r.Severity, &r.Hits); err != nil {
+		var rrow dom.AggByCategoryRow
+		if err := rows.Scan(&rrow.Category, &rrow.Severity, &rrow.Hits); err != nil {
 			return nil, err
 		}
-		out = append(out, r)
+		out = append(out, rrow)
 	}
 	return out, rows.Err()
+}
+
+// helpers
+func coalesce(s, def string) string {
+	if s == "" {
+		return def
+	}
+	return s
 }

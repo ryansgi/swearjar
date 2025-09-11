@@ -124,8 +124,6 @@ func makeActorHID(actorID int64) []byte {
 	return h[:]
 }
 
-// --- Signals ---------------------------------------------------------------
-
 func (r *queries) SeenRepo(ctx context.Context, repoID int64, fullName string, seenAt time.Time) error {
 	return r.SeenRepoHID(ctx, makeRepoHID(repoID), fullName, seenAt)
 }
@@ -309,8 +307,6 @@ func (r *queries) NackActorHID(ctx context.Context, actorHID []byte, backoff tim
 	`, actorHID, lastErr, backoff.String())
 	return err
 }
-
-// --- Upserts (consent-aware, HID-native core) --------------------------------
 
 func (r *queries) UpsertRepository(ctx context.Context, rec domain.RepositoryRecord) error {
 	return r.UpsertRepositoryHID(ctx, makeRepoHID(rec.RepoID), rec)
@@ -507,8 +503,6 @@ func (r *queries) TouchActor304HID(ctx context.Context, actorHID []byte, nextRef
 	`, actorHID, nextRefreshAt, etag)
 	return err
 }
-
-// --- Enqueue (bulk seed/refresh) ---------------------------------------------
 
 func (r *queries) EnqueueMissingReposFromUtterances(
 	ctx context.Context,

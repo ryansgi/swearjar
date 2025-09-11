@@ -4,6 +4,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"math/rand"
 	"strings"
@@ -16,6 +17,7 @@ import (
 
 	"swearjar/internal/modkit/repokit"
 	perr "swearjar/internal/platform/errors"
+	"swearjar/internal/platform/logger"
 	"swearjar/internal/services/backfill/domain"
 	"swearjar/internal/services/backfill/guardrails"
 )
@@ -133,10 +135,12 @@ func (s *Service) RunRange(ctx context.Context, start, end time.Time) error {
 		var fails int64
 		for _, hr := range hrs {
 			if err := s.runHourWithRetry(ctx, hr); err != nil {
+				fmt.Println(err)
 				atomic.AddInt64(&fails, 1)
 			}
 			if s.Cfg.DelayPerHour > 0 {
 				if err := sleepCtx(ctx, s.Cfg.DelayPerHour); err != nil {
+					fmt.Println(err)
 					return err
 				}
 			}
@@ -162,6 +166,12 @@ func (s *Service) RunRange(ctx context.Context, start, end time.Time) error {
 		go func() {
 			defer func() { <-sem; wg.Done() }()
 			if err := s.runHourWithRetry(ctx, hr); err != nil {
+				logger.C(ctx).
+					Error().
+					Time("hour", hr.UTC()).
+					Err(err).
+					Msg("backfill: runHour failed")
+
 				atomic.AddInt64(&fails, 1)
 			}
 			if s.Cfg.DelayPerHour > 0 {

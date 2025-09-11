@@ -2,11 +2,8 @@
 package module
 
 import (
-	"net/http"
-
 	"swearjar/internal/modkit"
 	"swearjar/internal/modkit/httpkit"
-	"swearjar/internal/modkit/repokit"
 	"swearjar/internal/services/utterances/domain"
 	"swearjar/internal/services/utterances/repo"
 	"swearjar/internal/services/utterances/service"
@@ -17,7 +14,7 @@ type Ports struct {
 	Reader domain.ReaderPort
 }
 
-// Module implements modkit.Module
+// Module implements the utterances module
 type Module struct {
 	deps  modkit.Deps
 	ports Ports
@@ -25,10 +22,13 @@ type Module struct {
 
 // New constructs a new utterances module
 func New(deps modkit.Deps) *Module {
+	if deps.CH == nil {
+		panic("utterances module requires ClickHouse (deps.CH nil)")
+	}
 	opts := FromConfig(deps.Cfg)
 
-	binder := repo.NewPG()
-	svc := service.New(repokit.TxRunner(deps.PG), binder, service.Config{
+	storage := repo.NewCH(deps.CH)
+	svc := service.New(storage, service.Config{
 		HardLimit: opts.HardLimit,
 	})
 
@@ -37,17 +37,14 @@ func New(deps modkit.Deps) *Module {
 	return m
 }
 
-// Name implements modkit.Module
+// Name satisfies modkit.Module
 func (m *Module) Name() string { return "utterances" }
 
-// Ports implements modkit.Module
+// Ports satisfies modkit.Module
 func (m *Module) Ports() any { return m.ports }
 
-// Prefix implements modkit.Module
+// Prefix satisfies modkit.Module
 func (m *Module) Prefix() string { return "" }
 
-// Middlewares implements modkit.Module
-func (m *Module) Middlewares() []func(http.Handler) http.Handler { return nil }
-
-// MountRoutes implements modkit.Module
-func (m *Module) MountRoutes(r httpkit.Router) {}
+// MountRoutes satisfies modkit.Module
+func (m *Module) MountRoutes(_ httpkit.Router) {}

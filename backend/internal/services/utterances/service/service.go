@@ -5,8 +5,7 @@ import (
 	"context"
 
 	"swearjar/internal/core/normalize"
-	"swearjar/internal/modkit/repokit"
-	"swearjar/internal/services/utterances/domain"
+	utdom "swearjar/internal/services/utterances/domain"
 	"swearjar/internal/services/utterances/repo"
 )
 
@@ -16,51 +15,38 @@ type Config struct {
 	HardLimit int
 }
 
-// Service implements domain.ReaderPort
+// Service implements domain.ReaderPort directly against the CH repo
 type Service struct {
-	DB     repokit.TxRunner
-	Binder repokit.Binder[repo.Storage]
-	Norm   *normalize.Normalizer
-	Cfg    Config
+	Storage *repo.CH
+	Norm    *normalize.Normalizer
+	Cfg     Config
 }
 
 // New constructs a new utterances service
-func New(db repokit.TxRunner, b repokit.Binder[repo.Storage], cfg Config) *Service {
+func New(storage *repo.CH, cfg Config) *Service {
 	if cfg.HardLimit <= 0 {
 		cfg.HardLimit = 5000
 	}
 	return &Service{
-		DB: db, Binder: b, Cfg: cfg, Norm: normalize.New(),
+		Storage: storage,
+		Norm:    normalize.New(),
+		Cfg:     cfg,
 	}
 }
 
-// List implements domain.ReaderPort
-// Guarantees that TextNorm is populated (may be empty string if text_raw is empty)
-// if text_raw is present, by normalizing it if needed
-func (s *Service) List(ctx context.Context, in domain.ListInput) ([]domain.Row, domain.AfterKey, error) {
+// List implements domain.ReaderPort.
+// Guarantees that TextNorm is populated (empty string is fine if no text present)
+func (s *Service) List(ctx context.Context, in utdom.ListInput) ([]utdom.Row, utdom.AfterKey, error) {
 	limit := in.Limit
 	if limit <= 0 || limit > s.Cfg.HardLimit {
 		limit = s.Cfg.HardLimit
 	}
 
-	var rows []domain.Row
-	var next domain.AfterKey
-	err := s.DB.Tx(ctx, func(q repokit.Queryer) error {
-		var err error
-		rows, next, err = s.Binder.Bind(q).List(ctx, in, limit)
-		return err
-	})
+	rows, next, err := s.Storage.List(ctx, in, limit)
 	if err != nil {
-		return nil, domain.AfterKey{}, err
+		return nil, utdom.AfterKey{}, err
 	}
 
-	// Guarantee normalized text is present
-	// for i := range rows {
-	// 	if rows[i].TextNorm == "" {
-	// 		// normalize from text_raw would require selecting it; choose policy:
-	// 		// keep empty (detector has its own normalizer), or expand SELECT to include text_raw.
-	// 		// For now we leave as-is; detector will normalize.
-	// 	}
-	// }
+	// If you later want to enforce normalization here, you can, but detector already normalizes
 	return rows, next, nil
 }

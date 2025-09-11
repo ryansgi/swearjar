@@ -19,19 +19,6 @@ type Ports struct {
 	HitsWriter hitsdom.WriterPort // required
 }
 
-// StorageRepo persists and queries utterances and hits
-type StorageRepo interface {
-	// Keyset page over utterances within [since, until)
-	ListUtterances(ctx context.Context,
-		since, until time.Time,
-		afterCommitted time.Time, afterID int64,
-		limit int,
-	) ([]Utterance, error)
-
-	// Batch insert hits (idempotent for same version via ON CONFLICT)
-	WriteHitsBatch(ctx context.Context, xs []Hit) error
-}
-
 // WriterPort accepts utterances and writes hits
 type WriterPort interface {
 	// Write processes a batch of normalized utterances and persists hits.
