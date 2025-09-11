@@ -2,57 +2,50 @@ package store
 
 import (
 	"context"
+	"errors"
 
 	"swearjar/internal/platform/store/ch"
 )
 
-// chClient is the tiny surface we need from clickhouse
-type chClient interface {
-	Insert(ctx context.Context, table string, data any) error
-	Query(ctx context.Context, sql string, args ...any) (ch.Rows, error)
-	Close() error
+// newCHAdapter is called by openers.go to wrap an existing *ch.CH
+// and return the store.Clickhouse seam (single return value).
+func newCHAdapter(c *ch.CH) Clickhouse {
+	return &clickhouseAdapter{inner: c}
 }
 
-// chAdapter wraps a chClient and implements store.Clickhouse
-type chAdapter struct {
-	c chClient
+// clickhouseAdapter adapts *ch.CH to the store.Clickhouse interface.
+type clickhouseAdapter struct {
+	inner *ch.CH
 }
 
-func newCHAdapter(c *ch.CH) *chAdapter { return &chAdapter{c: c} }
+var _ Clickhouse = (*clickhouseAdapter)(nil)
 
-// Insert delegates to ch
-func (a *chAdapter) Insert(ctx context.Context, table string, data any) error {
-	return a.c.Insert(ctx, table, data)
+func (a *clickhouseAdapter) Insert(ctx context.Context, table string, data any) error {
+	// Minimal shape for now: [][]any.
+	rows, ok := data.([][]any)
+	if !ok {
+		return errors.New("store: unsupported CH insert shape (want [][]any)")
+	}
+	return a.inner.Insert(ctx, table, rows)
 }
 
-// Query adapts ch.Rows to store.Rows
-func (a *chAdapter) Query(ctx context.Context, sql string, args ...any) (Rows, error) {
-	cr, err := a.c.Query(ctx, sql, args...)
+func (a *clickhouseAdapter) Query(ctx context.Context, sql string, args ...any) (Rows, error) {
+	r, err := a.inner.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}
-	return chRows{r: cr}, nil
+	return &rowsAdapter{r: r}, nil
 }
 
-// Close delegates to ch
-func (a *chAdapter) Close() error { return a.c.Close() }
+func (a *clickhouseAdapter) Close() error { return a.inner.Close() }
 
-// chRows implements store.Rows by delegating to ch.Rows
-type chRows struct{ r ch.Rows }
-
-func (x chRows) Next() bool            { return x.r.Next() }
-func (x chRows) Scan(dst ...any) error { return x.r.Scan(dst...) }
-func (x chRows) Err() error            { return x.r.Err() }
-func (x chRows) Close()                { x.r.Close() }
-
-// chColumns is an optional passthrough for column names if the underlying type provides it
-type chColumns interface {
-	Columns() []string
+// rowsAdapter wraps ch.Rows as store.Rows.
+type rowsAdapter struct {
+	r ch.Rows
 }
 
-func (x chRows) Columns() []string {
-	if c, ok := any(x.r).(chColumns); ok {
-		return c.Columns()
-	}
-	return nil
-}
+func (r *rowsAdapter) Next() bool             { return r.r.Next() }
+func (r *rowsAdapter) Scan(dest ...any) error { return r.r.Scan(dest...) }
+func (r *rowsAdapter) Err() error             { return r.r.Err() }
+func (r *rowsAdapter) Close()                 { _ = r.r.Close() }
+func (r *rowsAdapter) Columns() []string      { return r.r.Columns() }

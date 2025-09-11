@@ -1,32 +1,39 @@
-// Package repo provides postgres access for backfill writes
+// Package repo provides storage binders (PG + CH) for backfill
 package repo
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"swearjar/internal/modkit/repokit"
+	"swearjar/internal/platform/store"
 	"swearjar/internal/services/backfill/domain"
 	identdom "swearjar/internal/services/ident/domain"
 )
 
-type (
-	// PG is a Postgres binder for domain.StorageRepo
-	PG      struct{}
-	queries struct{ q repokit.Queryer }
-)
+// NewHybrid returns a binder that uses:
+//   - Postgres (via the provided Queryer) for hour accounting (ingest_hours)
+//   - ClickHouse (provided here) for facts (utterances) and lookups
+func NewHybrid(ch store.Clickhouse) repokit.Binder[domain.StorageRepo] {
+	return &hybridBinder{ch: ch}
+}
 
-// NewPG returns a Postgres binder for domain.StorageRepo
-func NewPG() repokit.Binder[domain.StorageRepo] { return PG{} }
+type hybridBinder struct{ ch store.Clickhouse }
 
-// Bind implements repokit.Binder
-func (PG) Bind(q repokit.Queryer) domain.StorageRepo { return &queries{q: q} }
+func (b *hybridBinder) Bind(q repokit.Queryer) domain.StorageRepo {
+	return &hybridStore{pg: q, ch: b.ch}
+}
 
-// StartHour marks the start of a backfill hour (idempotent)
-func (r *queries) StartHour(ctx context.Context, hour time.Time) error {
-	_, err := r.q.Exec(ctx, `
+// hybridStore uses PG for ingest_hours and CH for utterances facts/lookups
+type hybridStore struct {
+	pg repokit.Queryer  // Postgres: ingest_hours
+	ch store.Clickhouse // ClickHouse: utterances (facts) + lookups
+}
+
+func (s *hybridStore) StartHour(ctx context.Context, hour time.Time) error {
+	_, err := s.pg.Exec(ctx, `
 		INSERT INTO ingest_hours (hour_utc, started_at, status)
 		VALUES ($1, now(), 'running')
 		ON CONFLICT (hour_utc) DO UPDATE
@@ -35,9 +42,8 @@ func (r *queries) StartHour(ctx context.Context, hour time.Time) error {
 	return err
 }
 
-// FinishHour marks the end of a backfill hour (idempotent)
-func (r *queries) FinishHour(ctx context.Context, hour time.Time, fin domain.HourFinish) error {
-	_, err := r.q.Exec(ctx, `
+func (s *hybridStore) FinishHour(ctx context.Context, hour time.Time, fin domain.HourFinish) error {
+	_, err := s.pg.Exec(ctx, `
 		UPDATE ingest_hours SET
 			finished_at = now(),
 			status = $2,
@@ -60,31 +66,17 @@ func (r *queries) FinishHour(ctx context.Context, hour time.Time, fin domain.Hou
 	return err
 }
 
-func (r *queries) InsertUtterances(ctx context.Context, us []domain.Utterance) (int, int, error) {
-	const insertUttSQL = `
-		INSERT INTO utterances (
-			event_id, event_type, repo_hid, actor_hid, hid_key_version,
-			created_at, source, source_detail, ordinal, text_raw, text_normalized
-		)
-		SELECT
-			$1, $2, $3::hid_bytes, $4::hid_bytes, $5,
-			$6, $7::source_enum, $8, $9, $10, $11
-		WHERE
-			NOT EXISTS (
-				SELECT 1 FROM consent_receipts r
-				WHERE r.principal='repo' AND r.action='opt_out' AND r.state='active' AND r.principal_hid=$3::hid_bytes
-			)
-			AND NOT EXISTS (
-				SELECT 1 FROM consent_receipts r
-				WHERE r.principal='actor' AND r.action='opt_out' AND r.state='active' AND r.principal_hid=$4::hid_bytes
-			)
-		ON CONFLICT (event_id, source, ordinal) DO NOTHING
-	`
+// InsertUtterances writes a batch into ClickHouse.
+// NOTE: consent gating should happen before this call
+func (s *hybridStore) InsertUtterances(ctx context.Context, us []domain.Utterance) (int, int, error) {
+	if len(us) == 0 {
+		return 0, 0, nil
+	}
 
-	// assign ordinals deterministically per (event_id, source)
-	type k struct{ event, source string }
+	// Assign ordinals per (event_id, source)
+	type k struct{ ev, src string }
 	counts := map[k]int{}
-	var batch []domain.Utterance
+	batch := make([]domain.Utterance, 0, len(us))
 	for _, u := range us {
 		if u.RepoID == 0 || u.ActorID == 0 {
 			continue
@@ -94,57 +86,77 @@ func (r *queries) InsertUtterances(ctx context.Context, us []domain.Utterance) (
 		u.Ordinal = counts[key] - 1
 		batch = append(batch, u)
 	}
-
-	attempts, inserted := 0, 0
-	for _, u := range batch {
-		repoHID := identdom.RepoHID32(u.RepoID).Bytes()    // pass []byte
-		actorHID := identdom.ActorHID32(u.ActorID).Bytes() // pass []byte
-		attempts++
-		tag, err := r.q.Exec(ctx, insertUttSQL,
-			u.EventID, u.EventType,
-			repoHID, actorHID, int16(1),
-			u.CreatedAt,
-			u.Source, u.SourceDetail, u.Ordinal,
-			u.TextRaw, u.TextNormalized,
-		)
-		if err != nil {
-			return inserted, attempts - inserted,
-				fmt.Errorf("insert utterance %s/%s[%d]: %w", u.EventID, u.Source, u.Ordinal, err)
-		}
-		if tag.RowsAffected() > 0 {
-			inserted++
-		}
+	if len(batch) == 0 {
+		return 0, 0, nil
 	}
-	return inserted, attempts - inserted, nil
+
+	// Insert column list (omit `id` so CH uses DEFAULT generateUUIDv7())
+	const tableWithCols = "swearjar.utterances (" +
+		"event_id, event_type, repo_hid, actor_hid, hid_key_version," +
+		"created_at, source, source_detail, ordinal, text_raw, text_normalized," +
+		"ingest_batch_id, ver" +
+		")"
+
+	rows := make([][]any, 0, len(batch))
+	for _, u := range batch {
+		// domain.HID32 -> domain.HID (slice) -> []byte (driver expects raw bytes)
+		repoRaw := []byte(identdom.RepoHID32(u.RepoID).Bytes())    // []byte, len=32
+		actorRaw := []byte(identdom.ActorHID32(u.ActorID).Bytes()) // []byte, len=32
+
+		// Nullable normalized text
+		var norm any
+		if n := strings.TrimSpace(u.TextNormalized); n == "" {
+			norm = nil
+		} else {
+			norm = n
+		}
+
+		row := []any{
+			u.EventID,              // event_id (String)
+			u.EventType,            // event_type (String/Enum)
+			repoRaw,                // repo_hid (FixedString(32))
+			actorRaw,               // actor_hid (FixedString(32))
+			1,                      // hid_key_version
+			u.CreatedAt.UTC(),      // created_at (DateTime64(3))
+			coerceSource(u.Source), // source (Enum8) - string ok
+			zeroIfEmpty(u.SourceDetail, u.Source),
+			u.Ordinal, // ordinal
+			u.TextRaw, // text_raw
+			norm,      // text_normalized (Nullable(String))
+			0,         // ingest_batch_id
+			0,         // ver
+		}
+		rows = append(rows, row)
+	}
+
+	if err := s.ch.Insert(ctx, tableWithCols, rows); err != nil {
+		return 0, 0, err
+	}
+	return len(rows), 0, nil // dedupe handled later by ReplacingMergeTree
 }
 
-// LookupIDs resolves DB IDs (+ lang_code) for a set of (event_id, source, ordinal)
-func (r *queries) LookupIDs(ctx context.Context, keys []domain.UKey) (map[domain.UKey]domain.LookupRow, error) {
+// LookupIDs resolves (event_id, source, ordinal) -> (id, lang_code) from CH
+func (s *hybridStore) LookupIDs(ctx context.Context, keys []domain.UKey) (map[domain.UKey]domain.LookupRow, error) {
 	out := make(map[domain.UKey]domain.LookupRow, len(keys))
 	if len(keys) == 0 {
 		return out, nil
 	}
 
-	evs := make([]string, 0, len(keys))
-	srcs := make([]string, 0, len(keys))
-	ords := make([]int, 0, len(keys))
-	for _, k := range keys {
-		evs = append(evs, k.EventID)
-		srcs = append(srcs, k.Source)
-		ords = append(ords, k.Ordinal)
+	var sb strings.Builder
+	sb.WriteString(`
+	  SELECT event_id, toString(source) AS source, ordinal,
+	         any(id) AS id, any(lang_code) AS lang_code
+	  FROM swearjar.utterances
+	  WHERE (event_id, toString(source), ordinal) IN (`)
+	for i, k := range keys {
+		if i > 0 {
+			sb.WriteString(",")
+		}
+		sb.WriteString(fmt.Sprintf("('%s','%s',%d)", esc(k.EventID), esc(coerceSource(k.Source)), k.Ordinal))
 	}
+	sb.WriteString(") GROUP BY event_id, source, ordinal")
 
-	const q = `
-		WITH k AS (
-			SELECT * FROM UNNEST($1::text[], $2::source_enum[], $3::int[])
-			AS t(event_id, source, ordinal)
-		)
-		SELECT u.event_id, u.source::text, u.ordinal, u.id::text, u.lang_code
-		FROM utterances u
-		JOIN k ON u.event_id = k.event_id AND u.source = k.source AND u.ordinal = k.ordinal
-	`
-
-	rows, err := r.q.Query(ctx, q, evs, srcs, ords)
+	rows, err := s.ch.Query(ctx, sb.String())
 	if err != nil {
 		return nil, err
 	}
@@ -153,19 +165,50 @@ func (r *queries) LookupIDs(ctx context.Context, keys []domain.UKey) (map[domain
 	for rows.Next() {
 		var ev, src, id string
 		var ord int
-		var lang sql.NullString
+		var lang *string
 		if err := rows.Scan(&ev, &src, &ord, &id, &lang); err != nil {
 			return nil, err
 		}
-		var lp *string
-		if lang.Valid {
-			v := lang.String
-			lp = &v
-		}
 		out[domain.UKey{EventID: ev, Source: src, Ordinal: ord}] = domain.LookupRow{
-			ID:       id,
-			LangCode: lp,
+			ID: id, LangCode: lang,
 		}
 	}
 	return out, rows.Err()
+}
+
+// --- helpers ---
+func esc(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `'`, `\'`)
+	return s
+}
+
+func escNullable(s *string) (string, bool) {
+	if s == nil {
+		return "", true
+	}
+	return esc(*s), false
+}
+
+func zeroIfEmpty(v, fb string) string {
+	if v == "" {
+		return fb
+	}
+	return v
+}
+
+func coerceSource(s string) string {
+	ls := strings.ToLower(s)
+	switch {
+	case strings.HasPrefix(ls, "push:"):
+		return "commit"
+	case strings.HasPrefix(ls, "issues:"):
+		return "issue"
+	case strings.HasPrefix(ls, "pr:"):
+		return "pr"
+	}
+	if strings.Contains(ls, "comment:") {
+		return "comment"
+	}
+	return ls
 }

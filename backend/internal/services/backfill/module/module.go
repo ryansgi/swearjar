@@ -38,8 +38,7 @@ type Module struct {
 func New(deps modkit.Deps) *Module {
 	opts := FromConfig(deps.Cfg)
 
-	// DB binder (no deps passed into repo)
-	storeBinder := repo.NewPG()
+	storeBinder := repo.NewHybrid(deps.CH)
 
 	// Non-DB adapters
 	fetch := ingest.NewFetcher(deps)    // uses CORE_INGEST_* from deps.Cfg

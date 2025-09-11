@@ -5,7 +5,7 @@ import (
 	"swearjar/internal/modkit/repokit"
 	"swearjar/internal/platform/config"
 	"swearjar/internal/platform/logger"
-	ch "swearjar/internal/platform/store/ch"
+	"swearjar/internal/platform/store"
 )
 
 // Deps holds core dependencies passed to modules
@@ -14,7 +14,7 @@ type Deps struct {
 	Log logger.Logger
 	Cfg config.Conf
 	PG  repokit.TxRunner
-	CH  *ch.CH
+	CH  store.Clickhouse
 }
 
 // ZeroOK returns true when deps are safe to use with zero values in tests

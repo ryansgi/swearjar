@@ -5,7 +5,6 @@ import (
 	"context"
 
 	"swearjar/internal/platform/store"
-	ch "swearjar/internal/platform/store/ch"
 )
 
 // Queryer is the minimal read and write surface for SQL repos
@@ -40,4 +39,4 @@ func PG(_ context.Context, q store.RowQuerier) store.RowQuerier { return q }
 func TX(_ context.Context, tx store.TxRunner) store.TxRunner { return tx }
 
 // CH exposes ClickHouse seam if needed by a repo
-func CH(_ context.Context, db *ch.CH) *ch.CH { return db }
+func CH(_ context.Context, db store.Clickhouse) store.Clickhouse { return db }
