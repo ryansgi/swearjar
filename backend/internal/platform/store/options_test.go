@@ -7,32 +7,30 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func TestWithLogger_SetsOnStore(t *testing.T) {
+func TestWithLogger_SetsOnOptions_AndLogs(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
 	lg := zerolog.New(&buf) // write to buffer so we can assert output
 
-	opt := WithLogger(lg)
+	// Apply option to internal options bag (what Open uses)
+	o := buildOptions(WithLogger(lg))
 
-	s := &Store{}
-	if err := opt(s); err != nil {
-		t.Fatalf("WithLogger returned error: %v", err)
+	if o.log == nil {
+		t.Fatalf("expected options.log to be set")
 	}
 
-	// emit a log line using the store's logger, ensure it reaches our buffer
-	s.Log.Info().Str("k", "v").Msg("hello")
+	// Emit via the logger stored in options and assert it reaches our buffer
+	o.log.Info().Str("k", "v").Msg("hello")
 	if buf.Len() == 0 {
 		t.Fatalf("expected logger to write to buffer, got empty output")
 	}
 
-	// idempotence: applying same option again should keep working
-	prevLen := buf.Len()
-	if err := opt(s); err != nil {
-		t.Fatalf("WithLogger second apply error: %v", err)
-	}
-	s.Log.Info().Msg("again")
-	if buf.Len() == prevLen {
+	// Idempotence: re-applying should still work
+	prev := buf.Len()
+	o = buildOptions(WithLogger(lg))
+	o.log.Info().Msg("again")
+	if buf.Len() == prev {
 		t.Fatalf("expected additional log output after reapply")
 	}
 }

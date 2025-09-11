@@ -1,16 +1,23 @@
 package store
 
-import (
-	"swearjar/internal/platform/logger"
-)
+import "github.com/rs/zerolog"
 
-// Option mutates Store during Open
-type Option func(*Store) error
+type options struct {
+	log *zerolog.Logger
+}
 
-// WithLogger sets the logger used by subclients
-func WithLogger(log logger.Logger) Option {
-	return func(s *Store) error {
-		s.Log = log
-		return nil
+// Option customizes store behavior
+type Option func(*options)
+
+func buildOptions(opts ...Option) *options {
+	o := &options{}
+	for _, fn := range opts {
+		fn(o)
 	}
+	return o
+}
+
+// WithLogger sets a logger to use inside the store package
+func WithLogger(l zerolog.Logger) Option {
+	return func(o *options) { o.log = &l }
 }

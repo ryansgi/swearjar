@@ -8,28 +8,113 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/url"
-	"os"
-	"strconv"
+	"runtime/debug"
 	"strings"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+
+	"swearjar/internal/platform/logger"
 )
 
-// Config configures the client.
-// URL examples:
-//   - clickhouse://user:pass@host:9000/db            (native)
-//   - http://user:pass@host:8123/db                  (http)
-//   - https://user:pass@host:8443/db?skip_verify=1   (https, skip TLS verify)
-//
-// Optional query params: dial_timeout, read_timeout (Go durations)
-type Config struct {
-	URL string
+// QueryEvent describes a single CH operation (query/insert)
+type QueryEvent struct {
+	SQL       string
+	Args      any
+	ElapsedUS int64
+	Err       error
+	Slow      bool
+	Op        string // "query" or "insert"
 }
 
-// Rows is the minimal result-set surface exposed by this package
+// QueryTracer receives CH events (mirrors pg.QueryTracer)
+type QueryTracer interface {
+	OnQuery(ctx context.Context, ev QueryEvent)
+}
+
+// Tracer returns a logger-backed tracer (same idea as pg.Tracer)
+func Tracer(root logger.Logger) QueryTracer {
+	ll := root.With().Str("component", "ch").Logger()
+	return &zlTracer{log: ll}
+}
+
+type zlTracer struct{ log logger.Logger }
+
+func (z *zlTracer) OnQuery(_ context.Context, ev QueryEvent) {
+	const (
+		maxSQL  = 1024 // cap SQL shown
+		maxArgs = 512  // cap args preview
+	)
+
+	sql := ev.SQL
+	if len(sql) > maxSQL {
+		sql = sql[:maxSQL] + "..."
+	}
+
+	args := ev.Args
+	switch v := ev.Args.(type) {
+	case string:
+		if len(v) > maxArgs {
+			args = v[:maxArgs] + "..."
+		}
+	case fmt.Stringer:
+		s := v.String()
+		if len(s) > maxArgs {
+			args = s[:maxArgs] + "..."
+		}
+	}
+
+	evt := z.log.Info()
+	if ev.Err != nil {
+		evt = z.log.Error()
+	} else if ev.Slow {
+		evt = z.log.Warn()
+	}
+
+	builder := evt.
+		Str("op", ev.Op).
+		Float64("elapsed_ms", float64(ev.ElapsedUS)/1000.0).
+		Bool("slow", ev.Slow).
+		Str("sql", sql).
+		Interface("args", args).
+		Err(ev.Err)
+
+	if ev.Err != nil {
+		builder = builder.Bytes("stack", debug.Stack())
+	}
+	builder.Msg("ch op")
+}
+
+// Config fully describes a CH connection.
+// Fields mirror clickhouse.Options, plus client behavior knobs
+type Config struct {
+	// Connection options
+	Addrs      []string
+	Protocol   clickhouse.Protocol // clickhouse.Native or clickhouse.HTTP
+	TLS        *tls.Config
+	Auth       clickhouse.Auth
+	Dialer     func(ctx context.Context, addr string) (net.Conn, error)
+	Settings   clickhouse.Settings
+	ClientInfo clickhouse.ClientInfo
+
+	// Timeouts & compression
+	DialTimeout time.Duration
+	ReadTimeout time.Duration
+	Compression *clickhouse.Compression
+
+	// Tracing & behavior
+	Tracer      QueryTracer
+	SlowMs      int
+	InsertChunk int
+	MaxRetries  int
+	RetryBase   time.Duration
+
+	// Driver debug hook (optional)
+	Debugf func(format string, args ...any)
+}
+
+// Rows adapts driver.Rows to our local Rows
 type Rows interface {
 	Next() bool
 	Scan(dest ...any) error
@@ -38,85 +123,167 @@ type Rows interface {
 	Columns() []string
 }
 
-// CH is a concrete client
+// CH is a minimal ClickHouse client with retry and tracing
 type CH struct {
-	conn clickhouse.Conn
+	conn        clickhouse.Conn
+	tracer      QueryTracer
+	slowUS      int64
+	insertChunk int
+	maxRetries  int
+	retryBase   time.Duration
 }
 
-// Open establishes the connection and pings the server
+// Open establishes the connection and pings the server with small retry
 func Open(ctx context.Context, cfg Config) (*CH, error) {
-	if strings.TrimSpace(cfg.URL) == "" {
-		return nil, fmt.Errorf("ch: empty URL")
+	if len(cfg.Addrs) == 0 {
+		return nil, fmt.Errorf("ch: no addresses provided")
 	}
-	u, err := url.Parse(cfg.URL)
-	if err != nil {
-		return nil, fmt.Errorf("ch: parse url: %w", err)
+
+	insertChunk := cfg.InsertChunk
+	if insertChunk <= 0 {
+		insertChunk = 5000
 	}
-	opts, err := optsFromURL(u)
-	if err != nil {
-		return nil, err
+	maxRetries := cfg.MaxRetries
+	if maxRetries <= 0 {
+		maxRetries = 3
 	}
+	retryBase := cfg.RetryBase
+	if retryBase <= 0 {
+		retryBase = 200 * time.Millisecond
+	}
+
+	opts := &clickhouse.Options{
+		Addr:        cfg.Addrs,
+		Protocol:    cfg.Protocol,
+		TLS:         cfg.TLS,
+		Auth:        cfg.Auth,
+		DialTimeout: cfg.DialTimeout,
+		ReadTimeout: cfg.ReadTimeout,
+		Compression: cfg.Compression,
+		ClientInfo:  cfg.ClientInfo,
+		Debugf:      cfg.Debugf,
+		DialContext: cfg.Dialer, // nil ok
+		Settings:    cfg.Settings,
+	}
+
 	conn, err := clickhouse.Open(opts)
 	if err != nil {
 		return nil, fmt.Errorf("ch: open: %w", err)
 	}
-	if err := conn.Ping(ctx); err != nil {
-		return nil, fmt.Errorf("ch: ping: %w", err)
+
+	// Resilient ping handles initial EOF-ish
+	var last error
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		if err := conn.Ping(ctx); err != nil {
+			last = err
+			if !isEOFish(err) || attempt == maxRetries {
+				return nil, fmt.Errorf("ch: ping: %w", err)
+			}
+			time.Sleep(retryBase * time.Duration(attempt))
+			continue
+		}
+		last = nil
+		break
 	}
-	return &CH{conn: conn}, nil
+	if last != nil {
+		return nil, fmt.Errorf("ch: ping: %w", last)
+	}
+
+	return &CH{
+		conn:        conn,
+		tracer:      cfg.Tracer,
+		slowUS:      int64(cfg.SlowMs) * 1000,
+		insertChunk: insertChunk,
+		maxRetries:  maxRetries,
+		retryBase:   retryBase,
+	}, nil
 }
 
-// Insert inserts rows into table
+// Insert inserts rows into table in chunks with retry on EOF-ish failures.
+// Expects rows as [][]any (shape matching PrepareBatch.Append)
 func (c *CH) Insert(ctx context.Context, table string, rows [][]any) error {
 	if c == nil || c.conn == nil {
 		return fmt.Errorf("ch: nil client")
 	}
-	if strings.TrimSpace(table) == "" {
+	if table = strings.TrimSpace(table); table == "" {
 		return fmt.Errorf("ch: empty table")
 	}
 	if len(rows) == 0 {
 		return nil
 	}
 
-	// Allow DSN override: ?insert_chunk=5000 (default 5000)
-	chunk := 5000
-	if v := c.insertChunkSize(); v > 0 {
-		chunk = v
-	}
+	chunk := c.insertChunk
+	startAll := time.Now()
+	var last error
+
+	totalRows := len(rows)
+	totalChunks := (totalRows + chunk - 1) / chunk
+	var sumChunkUS int64
+	var maxChunkUS int64
 
 	for start := 0; start < len(rows); start += chunk {
-		end := start + chunk
-		if end > len(rows) {
-			end = len(rows)
+		end := min(start+chunk, len(rows))
+
+		// retry per chunk
+		last = nil
+		for attempt := 1; attempt <= c.maxRetries; attempt++ {
+			startChunk := time.Now()
+			err := c.insertChunkDo(ctx, table, rows[start:end])
+			elapsedUS := time.Since(startChunk).Microseconds()
+
+			// Track stats for final summary
+			sumChunkUS += elapsedUS
+			if elapsedUS > maxChunkUS {
+				maxChunkUS = elapsedUS
+			}
+
+			// Only emit per-chunk logs if slow or error
+			isSlow := c.slowUS > 0 && elapsedUS >= c.slowUS
+			if c.tracer != nil && (err != nil || isSlow) {
+				c.tracer.OnQuery(ctx, QueryEvent{
+					SQL:       "INSERT",
+					Args:      fmt.Sprintf("%d rows (chunk %d/%d, table=%s)", end-start, (start/chunk)+1, totalChunks, table),
+					ElapsedUS: elapsedUS,
+					Err:       err,
+					Slow:      isSlow,
+					Op:        "insert",
+				})
+			}
+
+			if err == nil {
+				break
+			}
+			last = err
+			if !isEOFish(err) || attempt == c.maxRetries {
+				return err
+			}
+			time.Sleep(c.retryBase * time.Duration(attempt))
 		}
-		if err := c.insertChunkWithRetry(ctx, table, rows[start:end]); err != nil {
-			return err
+		if last != nil {
+			return last
 		}
+	}
+
+	if c.tracer != nil {
+		elapsedUS := time.Since(startAll).Microseconds()
+		avgChunkMS := float64(0)
+		if totalChunks > 0 {
+			avgChunkMS = float64(sumChunkUS) / 1000.0 / float64(totalChunks)
+		}
+		c.tracer.OnQuery(ctx, QueryEvent{
+			SQL: "INSERT BULK",
+			Args: fmt.Sprintf("table=%s rows=%d chunks=%d total_ms=%.3f avg_chunk_ms=%.3f max_chunk_ms=%.3f",
+				table, totalRows, totalChunks, float64(elapsedUS)/1000.0, avgChunkMS, float64(maxChunkUS)/1000.0),
+			ElapsedUS: elapsedUS,
+			Err:       nil,
+			Slow:      c.slowUS > 0 && elapsedUS >= c.slowUS,
+			Op:        "insert",
+		})
 	}
 	return nil
 }
 
-func (c *CH) insertChunkWithRetry(ctx context.Context, table string, rows [][]any) error {
-	const (
-		maxAttempts = 3
-		baseDelay   = 200 * time.Millisecond
-	)
-	var last error
-	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		if err := c.insertChunk(ctx, table, rows); err != nil {
-			last = err
-			if !isEOFish(err) || attempt == maxAttempts {
-				return err
-			}
-			time.Sleep(baseDelay * time.Duration(attempt))
-			continue
-		}
-		return nil
-	}
-	return last
-}
-
-func (c *CH) insertChunk(ctx context.Context, table string, rows [][]any) error {
+func (c *CH) insertChunkDo(ctx context.Context, table string, rows [][]any) error {
 	stmt := "INSERT INTO " + table + " VALUES"
 	batch, err := c.conn.PrepareBatch(ctx, stmt)
 	if err != nil {
@@ -133,54 +300,37 @@ func (c *CH) insertChunk(ctx context.Context, table string, rows [][]any) error 
 	return nil
 }
 
-func isEOFish(err error) bool {
-	if err == nil {
-		return false
-	}
-	// Driver wraps, so unwrap and string-match is pragmatic
-	if errors.Is(err, io.EOF) {
-		return true
-	}
-	s := err.Error()
-	return strings.Contains(s, "EOF") ||
-		strings.Contains(s, "server closed idle connection") ||
-		strings.Contains(s, "use of closed network connection")
-}
-
-// parse ?insert_chunk= from the DSN used to open this CH
-func (c *CH) insertChunkSize() int {
-	// Best-effort: get url from conn info not exposed by driver;
-	// fall back to env/known defaults. Since Options isn't held,
-	// we can also parse from CLICKHOUSE_URL in env if you prefer.
-	// For now: read once from env var used by your config, if present
-	if u := os.Getenv("SERVICE_CLICKHOUSE_DBURL"); u != "" {
-		if chunkStr := getQueryParam(u, "insert_chunk"); chunkStr != "" {
-			if n, err := strconv.Atoi(chunkStr); err == nil && n > 0 {
-				return n
-			}
-		}
-	}
-	return 0
-}
-
-func getQueryParam(rawURL, key string) string {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return ""
-	}
-	return u.Query().Get(key)
-}
-
-// Query executes sql with args and returns rows
+// Query executes SQL with args and returns rows (retry on EOF-ish)
 func (c *CH) Query(ctx context.Context, sql string, args ...any) (Rows, error) {
 	if c == nil || c.conn == nil {
 		return nil, fmt.Errorf("ch: nil client")
 	}
-	r, err := c.conn.Query(ctx, sql, args...)
-	if err != nil {
-		return nil, err
+
+	var last error
+	for attempt := 1; attempt <= c.maxRetries; attempt++ {
+		start := time.Now()
+		r, err := c.conn.Query(ctx, sql, args...)
+		elapsedUS := time.Since(start).Microseconds()
+		if c.tracer != nil {
+			c.tracer.OnQuery(ctx, QueryEvent{
+				SQL:       sql,
+				Args:      args,
+				ElapsedUS: elapsedUS,
+				Err:       err,
+				Slow:      c.slowUS > 0 && elapsedUS >= c.slowUS,
+				Op:        "query",
+			})
+		}
+		if err == nil {
+			return &rows{r}, nil
+		}
+		last = err
+		if !isEOFish(err) || attempt == c.maxRetries {
+			return nil, err
+		}
+		time.Sleep(c.retryBase * time.Duration(attempt))
 	}
-	return &rows{r}, nil
+	return nil, last
 }
 
 // Close closes the connection
@@ -191,102 +341,21 @@ func (c *CH) Close() error {
 	return c.conn.Close()
 }
 
-// rows adapts driver.Rows to our local Rows via anonymous embedding.
-// This promotes Columns/Next/Scan/Err/Close from driver.Rows
+// rows adapts driver.Rows to our local Rows
 type rows struct{ driver.Rows }
 
 func (r *rows) Close() error { return r.Rows.Close() }
 
-func optsFromURL(u *url.URL) (*clickhouse.Options, error) {
-	addrs := []string{u.Host}
-	if u.Host == "" {
-		return nil, fmt.Errorf("ch: missing host in URL")
+// isEOFish - classify driver/network churns we should retry
+func isEOFish(err error) bool {
+	if err == nil {
+		return false
 	}
-
-	qs := u.Query()
-
-	// --- Auth & DB ------------------------------------------------------------
-	// Prefer userinfo, but allow query fallbacks (?username=, ?password=, ?database=)
-	user := ""
-	pass := ""
-	if u.User != nil {
-		user = u.User.Username()
-		pass, _ = u.User.Password()
+	if errors.Is(err, io.EOF) {
+		return true
 	}
-	if user == "" {
-		if v := qs.Get("username"); v != "" {
-			user = v
-		} else if v := qs.Get("user"); v != "" {
-			user = v
-		}
-	}
-	if pass == "" {
-		if v := qs.Get("password"); v != "" {
-			pass = v
-		} else if v := qs.Get("key"); v != "" { // ClickHouse Cloud often calls this "key"
-			pass = v
-		}
-	}
-	db := strings.TrimPrefix(u.Path, "/")
-	if db == "" {
-		db = qs.Get("database")
-	}
-
-	// --- Timeouts -------------------------------------------------------------
-	dialTO := 5 * time.Second
-	readTO := 0 * time.Second
-	if v := qs.Get("dial_timeout"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			dialTO = d
-		}
-	}
-	if v := qs.Get("read_timeout"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			readTO = d
-		}
-	}
-	// (WriteTimeout not supported in v2 options)
-
-	// --- TLS / Protocol -------------------------------------------------------
-	secure := u.Scheme == "https" || qs.Get("secure") == "true"
-	skipVerify := qs.Get("skip_verify") == "1" || qs.Get("skip_verify") == "true"
-
-	var tlsCfg *tls.Config
-	if secure {
-		tlsCfg = &tls.Config{InsecureSkipVerify: skipVerify}
-	}
-
-	proto := clickhouse.Native
-	if u.Scheme == "http" || u.Scheme == "https" {
-		proto = clickhouse.HTTP
-	}
-
-	// --- Dialer adapter (addr-only) ------------------------------------------
-	d := &net.Dialer{Timeout: dialTO}
-	dialFn := func(ctx context.Context, addr string) (net.Conn, error) {
-		return d.DialContext(ctx, "tcp", addr)
-	}
-
-	return &clickhouse.Options{
-		Addr:        addrs,
-		Protocol:    proto,
-		TLS:         tlsCfg,
-		Auth:        clickhouse.Auth{Database: db, Username: user, Password: pass},
-		DialTimeout: dialTO,
-		ReadTimeout: readTO,
-		Compression: &clickhouse.Compression{Method: clickhouse.CompressionLZ4},
-		ClientInfo: clickhouse.ClientInfo{
-			Products: []struct{ Name, Version string }{{Name: "swearjar", Version: "v0"}},
-		},
-		Debugf: func(format string, args ...any) {
-			// temporary; wire to your zerolog if you prefer
-			fmt.Printf("ch: "+format+"\n", args...)
-		},
-		DialContext: dialFn,
-		Settings: clickhouse.Settings{
-			"max_execution_time":               0,
-			"allow_experimental_nlp_functions": 1,
-			"max_insert_block_size":            10000,
-		},
-	}, nil
+	s := err.Error()
+	return strings.Contains(s, "EOF") ||
+		strings.Contains(s, "server closed idle connection") ||
+		strings.Contains(s, "use of closed network connection")
 }

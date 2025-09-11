@@ -69,30 +69,32 @@ type Pinger interface{ Ping(context.Context) error }
 // Open constructs a Store with the requested backends
 // backends not enabled in cfg remain nil on the Store
 func Open(ctx context.Context, cfg Config, opts ...Option) (*Store, error) {
-	s := &Store{}
-	for _, o := range opts {
-		if err := o(s); err != nil {
-			return nil, err
-		}
+	s := &Store{
+		PG: nil,
+		CH: nil,
+	}
+	o := buildOptions(opts...)
+
+	if o != nil && o.log != nil {
+		s.Log = *o.log
 	}
 
-	// defaults for zero logger to avoid nil checks
-	s.Log = s.Log.With().Logger()
-
+	// Postgres
 	if cfg.PG.Enabled {
-		pgClient, err := openPG(ctx, cfg, s)
+		pgRunner, err := openPG(ctx, cfg, s)
 		if err != nil {
 			return nil, err
 		}
-		s.PG = pgClient
+		s.PG = pgRunner
 	}
 
+	// ClickHouse
 	if cfg.CH.Enabled {
-		chClient, err := openCH(ctx, cfg, s)
+		chClient, err := openCH(ctx, cfg.CH, s)
 		if err != nil {
 			return nil, err
 		}
-		s.CH = chClient
+		s.CH = newCHAdapter(chClient)
 	}
 
 	return s, nil
@@ -112,8 +114,13 @@ func (s *Store) Guard(ctx context.Context) error {
 			}
 		}
 	}
-	// TODO: if/when these exist & implement Ping(ctx) error:
-	// if s.CH   != nil { ... }
+	if s.CH != nil {
+		if c, ok := any(s.CH).(Pinger); ok {
+			if err := c.Ping(ctx); err != nil {
+				errs = append(errs, fmt.Errorf("pg: %w", err))
+			}
+		}
+	}
 
 	return errors.Join(errs...)
 }
@@ -136,4 +143,12 @@ func (s *Store) Close(ctx context.Context) error {
 	}
 
 	return errors.Join(errs...)
+}
+
+// CHConn returns the Clickhouse seam, may be nil
+func (s *Store) CHConn() Clickhouse {
+	if s == nil {
+		return nil
+	}
+	return s.CH
 }

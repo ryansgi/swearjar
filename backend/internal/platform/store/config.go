@@ -27,8 +27,14 @@ type PGConfig struct {
 
 // CHConfig configures clickhouse connectivity
 type CHConfig struct {
-	Enabled bool
-	URL     string
+	Enabled     bool
+	URL         string
+	InsertChunk int
+	MaxRetries  int
+	RetryBaseMs int
+	LogSQL      bool
+	ClientTag   string
+	ClientName  string
 }
 
 // NATSConfig configures nats connectivity

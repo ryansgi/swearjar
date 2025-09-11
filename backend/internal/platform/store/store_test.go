@@ -2,8 +2,9 @@ package store
 
 import (
 	"context"
-	"errors"
 	"testing"
+
+	"github.com/rs/zerolog"
 )
 
 // TestOpen_CHOnly_SetsCHAndLeavesOthersNil exercises the CH success path from Open
@@ -16,7 +17,7 @@ func TestOpen_CHOnly_SetsCHAndLeavesOthersNil(t *testing.T) {
 			Enabled: true,
 			URL:     "clickhouse://local", // ch.Open stub returns a client
 		},
-		// all others disabled
+		// PG disabled; NATS/Redis intentionally not used by Open right now
 	}
 
 	s, err := Open(ctx, cfg)
@@ -27,7 +28,7 @@ func TestOpen_CHOnly_SetsCHAndLeavesOthersNil(t *testing.T) {
 		t.Fatalf("Open returned nil store")
 	}
 
-	// CH should be set; others nil
+	// CH should be set; PG should still be nil
 	if s.CH == nil {
 		t.Fatalf("CH not initialized")
 	}
@@ -35,7 +36,7 @@ func TestOpen_CHOnly_SetsCHAndLeavesOthersNil(t *testing.T) {
 		t.Fatalf("unexpected seams set PG=%T", s.PG)
 	}
 
-	// Close should ignore nil seams and close CH without error (stub CH.Close() returns nil)
+	// Close should ignore nil seams and close CH without error
 	if err := s.Close(ctx); err != nil {
 		t.Fatalf("Close returned error: %v", err)
 	}
@@ -65,73 +66,23 @@ func TestOpen_PGEnabled_BadURL_BubblesError(t *testing.T) {
 	}
 }
 
-// TestOpen_NATSEnabled_BadURL_BubblesError covers the NATS error path
-func TestOpen_NATSEnabled_BadURL_BubblesError(t *testing.T) {
+// TestOpen_OptionsApplied_NoPanicOnWithLogger exercises the WithLogger option path
+func TestOpen_OptionsApplied_NoPanicOnWithLogger(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	cfg := Config{
-		NATS: NATSConfig{
-			Enabled:   true,
-			URL:       "://bad", // nats.Connect fails to parse
-			JetStream: false,
-		},
-	}
 
-	s, err := Open(ctx, cfg)
-	if err == nil {
-		t.Fatalf("expected Open error for bad NATS URL, got store=%#v", s)
-	}
-	if s != nil {
-		t.Fatalf("expected nil store on error, got %#v", s)
-	}
-}
+	// Build a zero-value zerolog.Logger (valid, no-op)
+	var zl zerolog.Logger
 
-// TestOpen_RedisEnabled_BadAddr_BubblesError covers the Redis error path
-func TestOpen_RedisEnabled_SetsKV_AndCloseOK(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	cfg := Config{
-		RDS: RedisConfig{
-			Enabled: true,
-			// Even empty/invalid addresses will usually succeed at client construction time
-			Addr: "",
-			DB:   0,
-		},
-	}
-
-	s, err := Open(ctx, cfg)
-	if err != nil {
-		t.Fatalf("unexpected Open error: %v", err)
-	}
-
-	// Close should succeed and ignore nil seams
-	if err := s.Close(ctx); err != nil {
-		t.Fatalf("Close returned error: %v", err)
-	}
-}
-
-// TestOpen_OptionsApplied_NoPanicOnZeroLogger exercises the logger defaulting line
-func TestOpen_OptionsApplied_NoPanicOnZeroLogger(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	called := false
-	opt := func(s *Store) error {
-		called = true
-		// do not set s.Log; we want to hit s.Log = s.Log.With().Logger() safely
-		return nil
-	}
-
-	s, err := Open(ctx, Config{}, opt)
+	s, err := Open(ctx, Config{}, WithLogger(zl))
 	if err != nil {
 		t.Fatalf("Open returned error: %v", err)
 	}
-	if !called {
-		t.Fatalf("option was not applied")
+	if s == nil {
+		t.Fatalf("Open returned nil store")
 	}
-	// We can't compare zerologgers directly, but we can at least exercise Close on zero seams
+	// Close on empty store should be fine
 	if e := s.Close(ctx); e != nil {
 		t.Fatalf("Close on empty store returned error: %v", e)
 	}
@@ -159,22 +110,5 @@ func TestOpen_MultipleBackends_ErrShortCircuits(t *testing.T) {
 	}
 	if s != nil {
 		t.Fatalf("expected nil store when Open fails early, got %#v", s)
-	}
-	// No need to assert exact error; just ensure we didn't proceed to initialize others
-}
-
-// TestOpen_OptionError_Bubbles ensures option errors are returned immediately
-func TestOpen_OptionError_Bubbles(t *testing.T) {
-	t.Parallel()
-
-	optErr := errors.New("boom")
-	opt := func(*Store) error { return optErr }
-
-	s, err := Open(context.Background(), Config{}, opt)
-	if err == nil || !errors.Is(err, optErr) {
-		t.Fatalf("expected option error, got %v", err)
-	}
-	if s != nil {
-		t.Fatalf("expected nil store on option error, got %#v", s)
 	}
 }

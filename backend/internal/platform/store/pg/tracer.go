@@ -2,7 +2,7 @@ package pg
 
 import (
 	"context"
-	// temp: use zerolog here; we can hide it later behind logger package if you want
+
 	"swearjar/internal/platform/logger"
 
 	"github.com/rs/zerolog"
