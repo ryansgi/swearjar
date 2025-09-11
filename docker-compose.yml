@@ -29,10 +29,10 @@ x-go-service: &go-service
 services:
   postgres:
     container_name: ${SERVICE_PREFIX:-sw_}pgsql
-    #image: postgres:18beta3
-    build:
-      context: .
-      dockerfile: ./backend/docker/pgsql/Dockerfile
+    image: postgres:18beta3
+    # build:
+    #   context: .
+    #   dockerfile: ./backend/docker/pgsql/Dockerfile
     ports:
       - "${POSTGRES_PORT:-5432}:${POSTGRES_PORT:-5432}"
     environment:
@@ -68,6 +68,7 @@ services:
       - "9000:9000"
     volumes:
       - chdata:/var/lib/clickhouse
+      - "./backend/docker/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro"
     healthcheck:
       test:
         ["CMD-SHELL", "wget -qO- http://localhost:8123/ping | grep -q 'Ok.'"]
@@ -76,6 +77,20 @@ services:
       retries: 30
     env_file:
       - ./.env
+  clickhouseui:
+    env_file:
+      - ./.env
+    container_name: ${SERVICE_PREFIX:-sw_}clickhouseui
+    image: ghcr.io/caioricciuti/ch-ui:latest
+    restart: always
+    ports:
+      - "5302:5521"
+    environment:
+      VITE_CLICKHOUSE_URL: "http://localhost:8123"
+      VITE_CLICKHOUSE_USER: ${CLICKHOUSE_USER}
+      VITE_CLICKHOUSE_PASS: ${CLICKHOUSE_PASSWORD}
+      VITE_CLICKHOUSE_USE_ADVANCED: "true"
+      VITE_CLICKHOUSE_REQUEST_TIMEOUT: "30000"
   adminer:
     env_file:
       - ./.env

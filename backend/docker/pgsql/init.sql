@@ -7,17 +7,16 @@
 -- =========
 -- Extensions
 -- =========
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
-CREATE EXTENSION IF NOT EXISTS pg_cld2;
+CREATE EXTENSION "uuid-ossp";
 
 -- =========
 -- Enums
 -- =========
-CREATE TYPE source_enum         AS ENUM ('commit','issue','pr','comment');
-CREATE TYPE hit_category_enum   AS ENUM ('bot_rage','tooling_rage','self_own','generic');
-CREATE TYPE hit_severity_enum   AS ENUM ('mild','strong','slur_masked');
-CREATE TYPE stop_kind_enum      AS ENUM ('exact','substring','regex');
+-- CREATE TYPE source_enum         AS ENUM ('commit','issue','pr','comment');
+-- CREATE TYPE hit_category_enum   AS ENUM ('bot_rage','tooling_rage','self_own','generic');
+-- CREATE TYPE hit_severity_enum   AS ENUM ('mild','strong','slur_masked');
+-- CREATE TYPE stop_kind_enum      AS ENUM ('exact','substring','regex');
+
 CREATE TYPE principal_enum      AS ENUM ('repo','actor');
 CREATE TYPE consent_action_enum AS ENUM ('opt_in','opt_out');
 CREATE TYPE consent_state_enum  AS ENUM ('pending','active','revoked','expired');
@@ -204,127 +203,6 @@ CREATE VIEW active_allow_actors AS
    WHERE r.principal='actor' AND r.action='opt_in' AND r.state='active';
 
 -- =========
--- Utterances (CLD2 auto language)
--- =========
-CREATE TABLE utterances (
-  id                uuid PRIMARY KEY DEFAULT uuidv7(),
-  event_id          text        NOT NULL,
-  event_type        text        NOT NULL,
-  repo_hid          hid_bytes   NOT NULL REFERENCES principals_repos(repo_hid)  DEFERRABLE INITIALLY DEFERRED,
-  actor_hid         hid_bytes   NOT NULL REFERENCES principals_actors(actor_hid) DEFERRABLE INITIALLY DEFERRED,
-  hid_key_version   smallint    NOT NULL,
-  created_at        timestamptz NOT NULL,
-  source            source_enum NOT NULL,
-  source_detail     text        NOT NULL DEFAULT '',
-  ordinal           int         NOT NULL,
-  text_raw          text        NOT NULL,
-  text_normalized   text,
-  -- spoken language (primary only; populated by trigger)
-  lang_code         text,
-  lang_script       text,
-  lang_reliable     boolean,
-  lang_confidence   smallint
-);
-CREATE UNIQUE INDEX ux_utterances_event_source_ord ON utterances(event_id, source, ordinal);
-CREATE INDEX ix_utterances_text_norm_trgm          ON utterances USING gin (text_normalized gin_trgm_ops);
-CREATE INDEX ix_utterances_repo_hid_time           ON utterances(repo_hid, created_at);
-CREATE INDEX ix_utterances_actor_hid_time          ON utterances(actor_hid, created_at);
-CREATE INDEX ix_utterances_created_at              ON utterances(created_at);
-CREATE INDEX ix_utterances_created_id              ON utterances (created_at, id);
-CREATE INDEX ix_utterances_type_time               ON utterances(event_type, created_at);
-
--- CLD2 trigger
-CREATE OR REPLACE FUNCTION trg_set_utterance_language()
-RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE r RECORD;
-BEGIN
-  SELECT * INTO r FROM pg_cld2_detect_language(NEW.text_raw);
-  IF FOUND THEN
-    NEW.lang_code       := r.mll_language_code;
-    NEW.lang_script     := r.mll_primary_script_name;
-    NEW.lang_reliable   := r.is_reliable;
-    NEW.lang_confidence := CASE
-      WHEN r.text_bytes > 0
-        THEN GREATEST(0, LEAST(100, FLOOR(100.0 * r.valid_prefix_bytes::numeric / r.text_bytes)))
-      ELSE NULL
-    END;
-  END IF;
-  RETURN NEW;
-END $$;
-
-CREATE TRIGGER t_utterances_lang_before_ins
-BEFORE INSERT ON utterances
-FOR EACH ROW EXECUTE FUNCTION trg_set_utterance_language();
-
-CREATE TRIGGER t_utterances_lang_before_upd
-BEFORE UPDATE OF text_raw ON utterances
-FOR EACH ROW EXECUTE FUNCTION trg_set_utterance_language();
-
--- =========
--- Hits (HID-only)
--- =========
-CREATE TABLE hits (
-  id               uuid PRIMARY KEY DEFAULT uuidv7(),
-  utterance_id     uuid NOT NULL REFERENCES utterances(id) ON DELETE CASCADE,
-  created_at       timestamptz NOT NULL DEFAULT now(),
-  source           source_enum NOT NULL,
-  repo_hid         hid_bytes   NOT NULL REFERENCES principals_repos(repo_hid)  DEFERRABLE INITIALLY DEFERRED,
-  actor_hid        hid_bytes   NOT NULL REFERENCES principals_actors(actor_hid) DEFERRABLE INITIALLY DEFERRED,
-  lang_code        text,
-  term             text NOT NULL,
-  category         hit_category_enum NOT NULL,
-  severity         hit_severity_enum NOT NULL,
-  span_start       int NOT NULL,
-  span_end         int NOT NULL,
-  detector_version int NOT NULL REFERENCES rulepacks(version)
-);
-ALTER TABLE hits ADD CONSTRAINT ck_hits_span_valid CHECK (span_start >= 0 AND span_end > span_start);
-
-CREATE UNIQUE INDEX uniq_hits_semantic       ON hits (utterance_id, term, span_start, span_end, detector_version);
-CREATE INDEX idx_hits_repo_hid_created       ON hits (repo_hid, created_at);
-CREATE INDEX idx_hits_actor_hid_created      ON hits (actor_hid, created_at);
-CREATE INDEX idx_hits_cat_sev                ON hits (category, severity);
-CREATE INDEX idx_hits_lang                   ON hits (lang_code);
-CREATE INDEX idx_hits_term_created           ON hits (term, created_at);
-CREATE INDEX idx_hits_created_at             ON hits (created_at);
-CREATE INDEX idx_hits_detver_created         ON hits (detector_version, created_at);
-
--- =========
--- Aggregates (spoken/coding)
--- =========
-CREATE TABLE agg_daily_lang_spk (
-  day               date NOT NULL,
-  lang_code         text,
-  hits              bigint NOT NULL,
-  events            bigint NOT NULL,
-  detector_version  int NOT NULL REFERENCES rulepacks(version),
-  PRIMARY KEY (day, lang_code, detector_version)
-);
-
-CREATE MATERIALIZED VIEW agg_daily_hits_by_code_lang AS
-SELECT
-  date_trunc('day', u.created_at) AS day,
-  COALESCE(r.primary_lang, 'Unknown') AS code_lang,
-  count(*) AS hits
-FROM hits h
-JOIN utterances u ON u.id = h.utterance_id
-LEFT JOIN repositories r ON r.repo_hid = u.repo_hid
-GROUP BY 1, 2;
-CREATE INDEX agg_dhcl_day_lang_idx ON agg_daily_hits_by_code_lang (day, code_lang);
-
-CREATE MATERIALIZED VIEW agg_daily_hits_by_actor_lang AS
-SELECT
-  date_trunc('day', u.created_at) AS day,
-  COALESCE(r.primary_lang, 'Unknown') AS code_lang,
-  u.actor_hid AS actor_hid,
-  count(*) AS hits
-FROM hits h
-JOIN utterances u ON u.id = h.utterance_id
-LEFT JOIN repositories r ON r.repo_hid = u.repo_hid
-GROUP BY 1, 2, 3;
-CREATE INDEX agg_dhalb_day_lang_idx ON agg_daily_hits_by_actor_lang (day, code_lang);
-
--- =========
 -- Ingest accounting + leases
 -- =========
 CREATE TABLE ingest_hours (
@@ -383,7 +261,7 @@ CREATE INDEX actor_catalog_queue_due_idx ON actor_catalog_queue (next_attempt_at
 -- =========
 -- IDENT schema (maps + audit)
 -- =========
-CREATE SCHEMA IF NOT EXISTS ident;
+CREATE SCHEMA ident;
 
 CREATE TABLE ident.gh_repo_map (
   repo_hid   hid_bytes PRIMARY KEY,
@@ -581,6 +459,7 @@ END $$;
 
 -- =========
 -- PURGE on active OPT-OUT (delete everything we can)
+-- note: Hits and Utterances are in CH, and will have to be purged there via separate process
 -- =========
 CREATE OR REPLACE FUNCTION trg_purge_on_optout()
 RETURNS trigger LANGUAGE plpgsql AS $$
@@ -588,15 +467,11 @@ BEGIN
   -- only act when action=opt_out becomes active
   IF NEW.action='opt_out' AND NEW.state='active' THEN
     IF NEW.principal='repo' THEN
-      DELETE FROM hits                 WHERE repo_hid  = NEW.principal_hid;
-      DELETE FROM utterances           WHERE repo_hid  = NEW.principal_hid;
       DELETE FROM repositories         WHERE repo_hid  = NEW.principal_hid;
       DELETE FROM repo_catalog_queue   WHERE repo_hid  = NEW.principal_hid;
       DELETE FROM ident.gh_repo_map    WHERE repo_hid  = NEW.principal_hid;
       -- principals row left in place; ingest path should skip via deny checks
     ELSIF NEW.principal='actor' THEN
-      DELETE FROM hits                 WHERE actor_hid = NEW.principal_hid;
-      DELETE FROM utterances           WHERE actor_hid = NEW.principal_hid;
       DELETE FROM actors               WHERE actor_hid = NEW.principal_hid;
       DELETE FROM actor_catalog_queue  WHERE actor_hid = NEW.principal_hid;
       DELETE FROM ident.gh_actor_map   WHERE actor_hid = NEW.principal_hid;
@@ -643,10 +518,10 @@ ALTER TABLE principals_actors
 ALTER TABLE principals_repos  ADD CONSTRAINT ck_repo_label_consent  CHECK (_label_explicit IS NULL OR can_expose_repo(repo_hid));
 ALTER TABLE principals_actors ADD CONSTRAINT ck_actor_label_consent CHECK (_label_explicit IS NULL OR can_expose_actor(actor_hid));
 
-CREATE UNIQUE INDEX IF NOT EXISTS principals_repos_hidhex_idx  ON principals_repos(hid_hex);
-CREATE UNIQUE INDEX IF NOT EXISTS principals_actors_hidhex_idx ON principals_actors(hid_hex);
-CREATE INDEX IF NOT EXISTS principals_repos_label_ci_idx ON principals_repos(lower(label));
-CREATE INDEX IF NOT EXISTS principals_actors_label_ci_idx ON principals_actors(lower(label));
+CREATE UNIQUE INDEX principals_repos_hidhex_idx  ON principals_repos(hid_hex);
+CREATE UNIQUE INDEX principals_actors_hidhex_idx ON principals_actors(hid_hex);
+CREATE INDEX principals_repos_label_ci_idx ON principals_repos(lower(label));
+CREATE INDEX principals_actors_label_ci_idx ON principals_actors(lower(label));
 
 -- =========
 -- APP ROLE GRANTS
@@ -797,5 +672,5 @@ ALTER FUNCTION ident.bulk_upsert_gh_actor_map(text[], bigint[]) OWNER TO broker;
 REVOKE ALL ON FUNCTION ident.bulk_upsert_gh_actor_map(text[], bigint[]) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION ident.bulk_upsert_gh_actor_map(text[], bigint[]) TO sw_api, sw_hallmonitor;
 
-GRANT INSERT, SELECT ON ident.gh_repo_map  TO broker;
+GRANT INSERT, SELECT ON ident.gh_repo_map TO broker;
 GRANT INSERT, SELECT ON ident.gh_actor_map TO broker;

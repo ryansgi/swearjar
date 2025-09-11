@@ -1,83 +1,105 @@
--- You can run these in the default database or a dedicated one (e.g., swearjar).
--- CREATE DATABASE IF NOT EXISTS swearjar;
--- USE swearjar;
+-- Facts live in Clickhouse, we keep our control-plane in Postgres
 
--- ---------- Enums (CH Enum8) ----------
--- Matches PG enums; adjust values only by adding to the end to avoid remaps.
--- CH enums are column-local; we declare inline below.
+CREATE DATABASE IF NOT EXISTS swearjar;
+USE swearjar;
 
--- ---------- Core: hits (analytics-friendly) ----------
-CREATE TABLE IF NOT EXISTS hits_ch
+-- Usually I wouldn't recommend using experimental features in prod,
+-- but Clickhouse NLP functions are the only game in town for now (and remove a lot of complexity).
+-- They are fairly stable, and we can always reprocess data later if needed.
+-- See: https://clickhouse.com/docs/en/sql-reference/functions/experimental/nlp/
+SET allow_experimental_nlp_functions = 1;
+
+-- UTTERANCES (facts)
+CREATE TABLE utterances
 (
-  id               UUID,                                     -- from PG uuidv7()
-  utterance_id     UUID,                                     -- from PG
-  created_at       DateTime64(3) CODEC(DoubleDelta, ZSTD(6)),
-  -- enums
-  source           Enum8('commit' = 1, 'issue' = 2, 'pr' = 3, 'comment' = 4),
-  category         Enum8('bot_rage' = 1, 'tooling_rage' = 2, 'self_own' = 3, 'generic' = 4),
-  severity         Enum8('mild' = 1, 'strong' = 2, 'slur_masked' = 3),
-  -- dims
-  repo_name        LowCardinality(String) CODEC(ZSTD(6)),
-  lang_code        LowCardinality(String) CODEC(ZSTD(6)),
-  term             LowCardinality(String) CODEC(ZSTD(6)),
-  span_start       Int32,
-  span_end         Int32,
-  detector_version UInt16
+  -- identity & routing (IDs supplied by app; prefer deterministic for idempotency)
+  id                 UUID,
+  event_id           String,
+  event_type         String,
+
+  -- 32-byte HIDs as raw bytes
+  repo_hid           FixedString(32),
+  actor_hid          FixedString(32),
+  hid_key_version    Int16,
+
+  created_at         DateTime64(3, 'UTC'),
+
+  source             Enum8('commit' = 1, 'issue' = 2, 'pr' = 3, 'comment' = 4),
+  source_detail      String,
+  ordinal            Int32,
+
+  text_raw           String CODEC(ZSTD(12)),
+  text_normalized    Nullable(String) CODEC(ZSTD(12)),
+
+  -- language: auto-detect on insert
+  lang_code          Nullable(String)
+      DEFAULT if(length(text_raw) > 0, detectLanguage(text_raw), NULL),
+
+  -- best-effort confidence proxy (0..100-ish); guard empty text
+  lang_confidence    Nullable(Int16)
+      DEFAULT if(length(text_raw) > 0,
+                  toInt16(100 * arrayMax(mapValues(detectLanguageMixed(text_raw)))),
+                  NULL),
+
+  -- simple reliability flag (tune threshold if desired)
+  lang_reliable      UInt8
+      DEFAULT ifNull(lang_confidence, 0) >= 60,
+
+  -- script not available from CH NLP; kept for parity/ingest-side fills
+  lang_script        Nullable(String),
+
+  -- RU-only sentiment; NULL otherwise
+  sentiment_score    Nullable(Float32)
+      DEFAULT if(lang_code = 'ru', detectTonality(text_raw), NULL),
+
+  -- ingest metadata / upsert aid (use a stable number per batch; replays can reuse it)
+  ingest_batch_id    UInt64 DEFAULT 0,
+  ver                UInt64 DEFAULT ingest_batch_id
 )
-ENGINE = MergeTree
-PARTITION BY toYYYYMM(created_at)
-ORDER BY (repo_name, created_at, detector_version, category, severity)
-SETTINGS index_granularity = 8192;
+ENGINE = ReplacingMergeTree(ver)
+  PARTITION BY toYYYYMM(created_at)
+  ORDER BY (repo_hid, created_at, actor_hid, event_id, source, ordinal, id)
+  SETTINGS index_granularity = 8192;
 
--- Optional helper projections (e.g., order by created_at for time slices)
--- CREATE PROJECTION hits_ch_by_time
---   (SELECT * ORDER BY created_at) PRIMARY KEY created_at;
+-- Text skipping index (token-based). Note: column is Nullable(String), so index an expression.
+CREATE INDEX utt_text_tokenbf ON utterances (coalesce(text_normalized, '')) TYPE tokenbf_v1(1024, 2, 0) GRANULARITY 64;
 
--- ---------- Daily language rollup (auto via MV) ----------
-CREATE TABLE IF NOT EXISTS agg_daily_lang_spk_ch
+-- If you need aggressive substring search, consider ngrambf_v1 instead (pick one style)
+-- CREATE INDEX utt_text_ngrambf ON utterances (coalesce(text_normalized, '')) TYPE ngrambf_v1(3, 2048, 2, 0) GRANULARITY 64;
+
+-- HITS (facts)
+CREATE TABLE hits
 (
-  day              Date,
-  lang_code        LowCardinality(String),
-  detector_version UInt16,
-  hits             UInt64,
-  events           UInt64
-)
-ENGINE = SummingMergeTree
-PARTITION BY toYYYYMM(day)
-ORDER BY (day, lang_code, detector_version)
-SETTINGS index_granularity = 8192;
+  id                 UUID,
+  utterance_id       UUID, -- must match utterances.id
+  created_at         DateTime64(3, 'UTC'),
 
--- Materialized view to populate the daily rollup from hits_ch.
--- "events" can be derived from distinct utterances per day/lang if desired; for now, pass it in or compute separately.
-CREATE MATERIALIZED VIEW IF NOT EXISTS mv_hits_to_daily
-TO agg_daily_lang_spk_ch AS
-SELECT
-  toDate(created_at) AS day,
-  lang_code,
-  detector_version,
-  count()          AS hits,
-  uniqExact(utterance_id) AS events
-FROM hits_ch
-GROUP BY day, lang_code, detector_version;
+  source             Enum8('commit' = 1, 'issue' = 2, 'pr' = 3, 'comment' = 4),
 
--- ---------- Governance mirrors (optional; join filters in CH) ----------
--- These are *not* authoritative; sync from PG on a schedule.
-CREATE TABLE IF NOT EXISTS repo_opt_outs_ch
-(
-  repo_name       LowCardinality(String),
-  effective_from  DateTime,
-  effective_to    Nullable(DateTime),
-  reason          String
-)
-ENGINE = MergeTree
-ORDER BY (repo_name, effective_from);
+  repo_hid           FixedString(32),
+  actor_hid          FixedString(32),
 
-CREATE TABLE IF NOT EXISTS actor_opt_outs_ch
-(
-  actor_hash      FixedString(32), -- raw 32 bytes rendered as 32-byte string if you prefer; or String for hex(64)
-  effective_from  DateTime,
-  effective_to    Nullable(DateTime),
-  reason          String
+  lang_code          Nullable(String),
+  term               String, -- normalized
+  category           Enum8('bot_rage' = 1, 'tooling_rage' = 2, 'self_own' = 3, 'generic' = 4),
+  severity           Enum8('mild' = 1, 'strong' = 2, 'slur_masked' = 3),
+
+  span_start         Int32,
+  span_end           Int32,
+  CONSTRAINT ck_hits_span_valid CHECK span_start >= 0 AND span_end > span_start,
+
+  detector_version   Int32,
+
+  ingest_batch_id    UInt64 DEFAULT 0,
+  ver                UInt64 DEFAULT ingest_batch_id
 )
-ENGINE = MergeTree
-ORDER BY (actor_hash, effective_from);
+ENGINE = ReplacingMergeTree(ver)
+  PARTITION BY toYYYYMM(created_at)
+  ORDER BY (repo_hid, created_at, actor_hid, term, utterance_id, id)
+  SETTINGS index_granularity = 8192;
+
+-- Fast WHERE term IN (...) / term='...'
+CREATE INDEX IF NOT EXISTS hit_term_tokenbf ON hits (term) TYPE tokenbf_v1(1024, 2, 0) GRANULARITY 64;
+
+ALTER TABLE utterances MODIFY COLUMN id UUID DEFAULT generateUUIDv7();
+ALTER TABLE hits       MODIFY COLUMN id UUID DEFAULT generateUUIDv7();

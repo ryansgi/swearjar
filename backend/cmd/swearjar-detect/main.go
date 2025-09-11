@@ -29,16 +29,21 @@ func mustSetEnv(k, v string) {
 
 func main() {
 	root := config.New()
-	dbCfg := root.Prefix("SERVICE_PGSQL_")
+	pgCfg := root.Prefix("SERVICE_PGSQL_")
+	chCfg := root.Prefix("SERVICE_CLICKHOUSE_")
 	l := logger.Get()
 
 	st, err := store.Open(context.Background(), store.Config{
 		PG: store.PGConfig{
 			Enabled:     true,
-			URL:         dbCfg.MustString("DBURL"),
-			MaxConns:    int32(dbCfg.MayInt("MAX_CONNS", 4)),
-			SlowQueryMs: dbCfg.MayInt("SLOW_MS", 500),
-			LogSQL:      dbCfg.MayBool("LOG_SQL", true),
+			URL:         pgCfg.MustString("DBURL"),
+			MaxConns:    int32(pgCfg.MayInt("MAX_CONNS", 4)),
+			SlowQueryMs: pgCfg.MayInt("SLOW_MS", 500),
+			LogSQL:      pgCfg.MayBool("LOG_SQL", true),
+		},
+		CH: store.CHConfig{
+			Enabled: true,
+			URL:     chCfg.MustString("DBURL"),
 		},
 	}, store.WithLogger(*l))
 	if err != nil {
