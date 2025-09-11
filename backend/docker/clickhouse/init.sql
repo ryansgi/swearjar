@@ -58,7 +58,7 @@ CREATE TABLE utterances
 )
 ENGINE = ReplacingMergeTree(ver)
   PARTITION BY toYYYYMM(created_at)
-  ORDER BY (repo_hid, created_at, actor_hid, event_id, source, ordinal, id)
+  ORDER BY (repo_hid, created_at, actor_hid, event_id, source, ordinal)
   SETTINGS index_granularity = 8192;
 
 -- Text skipping index (token-based). Note: column is Nullable(String), so index an expression.
@@ -95,7 +95,7 @@ CREATE TABLE hits
 )
 ENGINE = ReplacingMergeTree(ver)
   PARTITION BY toYYYYMM(created_at)
-  ORDER BY (repo_hid, created_at, actor_hid, term, utterance_id, id)
+  ORDER BY (repo_hid, created_at, actor_hid, term, utterance_id)
   SETTINGS index_granularity = 8192;
 
 -- Fast WHERE term IN (...) / term='...'
