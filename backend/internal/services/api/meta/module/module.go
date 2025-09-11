@@ -49,6 +49,7 @@ func New(deps modkit.Deps, opts ...modkit.Option) modkit.Module {
 			ServiceName: "swearjar-api",
 			StartedAt:   m.startedAt,
 			PG:          deps.PG,
+			CH:          deps.CH,
 		})
 		if external != nil {
 			external(r)
