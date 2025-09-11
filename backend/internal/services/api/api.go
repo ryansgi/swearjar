@@ -36,6 +36,7 @@ func Mount(r phttp.Router, opt Options) {
 	deps := modkit.Deps{
 		Cfg: opt.Config,
 		PG:  opt.Store.PG,
+		CH:  opt.Store.CHConn(),
 	}
 
 	// Construct the WORKER bouncer module first and extract its Enqueuer port
