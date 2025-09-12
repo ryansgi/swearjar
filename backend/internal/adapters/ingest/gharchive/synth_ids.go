@@ -2,6 +2,8 @@ package gharchive
 
 import (
 	"crypto/sha256"
+	"database/sql/driver"
+	"encoding/binary"
 	"encoding/json/v2"
 	"hash/fnv"
 	"net/url"
@@ -9,6 +11,8 @@ import (
 	"strings"
 
 	identdom "swearjar/internal/services/ident/domain"
+
+	"github.com/google/uuid"
 )
 
 // Synthetic IDs and HIDs: legacy support for missing actor.id and repo.id.
@@ -208,4 +212,84 @@ func ownerRepoFromURL(u string) (string, bool) {
 		return strings.ToLower(path.Join(parts[len(parts)-2], parts[len(parts)-1])), true
 	}
 	return "", false
+}
+
+// DeterministicUUID is a stable, synthetic UUID derived from raw event payload.
+// It wraps uuid.UUID to make intent explicit in types like EventEnvelope
+type DeterministicUUID uuid.UUID
+
+// NewDeterministicUUID constructs from a standard uuid.UUID
+func NewDeterministicUUID(u uuid.UUID) DeterministicUUID { return DeterministicUUID(u) }
+
+// UUID returns the underlying uuid.UUID
+func (d DeterministicUUID) UUID() uuid.UUID { return uuid.UUID(d) }
+
+// String implements fmt.Stringer
+func (d DeterministicUUID) String() string { return uuid.UUID(d).String() }
+
+// MarshalJSON outputs as a string
+func (d DeterministicUUID) MarshalJSON() ([]byte, error) {
+	return json.Marshal(d.String())
+}
+
+// UnmarshalJSON parses from string
+func (d *DeterministicUUID) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	u, err := uuid.Parse(s)
+	if err != nil {
+		return err
+	}
+	*d = DeterministicUUID(u)
+	return nil
+}
+
+// Value implements driver.Valuer for SQL databases
+func (d DeterministicUUID) Value() (driver.Value, error) { return d.String(), nil }
+
+// Scan implements sql.Scanner for SQL databases
+func (d *DeterministicUUID) Scan(src any) error {
+	switch v := src.(type) {
+	case string:
+		u, err := uuid.Parse(v)
+		if err != nil {
+			return err
+		}
+		*d = DeterministicUUID(u)
+		return nil
+	case []byte:
+		u, err := uuid.ParseBytes(v)
+		if err != nil {
+			return err
+		}
+		*d = DeterministicUUID(u)
+		return nil
+	default:
+		return nil
+	}
+}
+
+// DeterministicUUID builds a stable UUID derived from raw payload + source + ordinal.
+// It uses UUIDv5 (SHA-1 based) semantics, but seeded with SHA-256 for bettercollision resistance.
+// IDs should be stable across replays
+func (e *EventEnvelope) DeterministicUUID(source string, ordinal int) uuid.UUID {
+	h := sha256.New()
+	h.Write(e.RawPayload)
+	h.Write([]byte{0x1F})
+	h.Write([]byte(strings.ToLower(source)))
+	h.Write([]byte{0x1F})
+	var buf [20]byte
+	n := binary.PutVarint(buf[:], int64(ordinal))
+	h.Write(buf[:n])
+
+	sum := h.Sum(nil) // 32 bytes
+	// Collapse to UUID (v5 style: SHA-1 -> UUID; here we just truncate SHA-256)
+	var out [16]byte
+	copy(out[:], sum[:16])
+	out[6] = (out[6] & 0x0f) | 0x50 // set version 5
+	out[8] = (out[8] & 0x3f) | 0x80 // set RFC 4122 variant
+	id, _ := uuid.FromBytes(out[:])
+	return id
 }
