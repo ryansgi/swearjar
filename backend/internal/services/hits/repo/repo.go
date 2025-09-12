@@ -3,6 +3,8 @@ package repo
 
 import (
 	"context"
+	"encoding/binary"
+	"hash/fnv"
 
 	"swearjar/internal/platform/store"
 	dom "swearjar/internal/services/hits/domain"
@@ -23,10 +25,12 @@ func (r *CH) WriteBatch(ctx context.Context, xs []dom.HitWrite) error {
 	}
 
 	const table = "swearjar.hits (" +
-		"utterance_id, created_at, source, repo_hid, actor_hid, " +
+		"id, utterance_id, created_at, source, repo_hid, actor_hid, " +
 		"lang_code, term, category, severity, span_start, span_end, detector_version, " +
 		"ingest_batch_id, ver" +
 		")"
+
+	batchID := batchID64(xs)
 
 	rows := make([][]any, 0, len(xs))
 	for _, h := range xs {
@@ -36,22 +40,22 @@ func (r *CH) WriteBatch(ctx context.Context, xs []dom.HitWrite) error {
 		} else {
 			lang = h.LangCode
 		}
-
 		rows = append(rows, []any{
-			h.UtteranceID,      // UUID (String OK)
-			h.CreatedAt.UTC(),  // DateTime64(3)
-			h.Source,           // Enum8 string
-			[]byte(h.RepoHID),  // FixedString(32)
-			[]byte(h.ActorHID), // FixedString(32)
-			lang,               // Nullable(String)
-			h.Term,             // String
-			h.Category,         // Enum8 string
-			h.Severity,         // Enum8 string
-			h.SpanStart,        // Int32
-			h.SpanEnd,          // Int32
-			h.DetectorVersion,  // Int32
-			0,                  // ingest_batch_id
-			0,                  // ver (ReplacingMergeTree)
+			h.DeterministicUUID().String(), // Hit ID
+			h.UtteranceID,                  // UUID (String OK)
+			h.CreatedAt.UTC(),              // DateTime64(3)
+			h.Source,                       // Enum8 string
+			[]byte(h.RepoHID),              // FixedString(32)
+			[]byte(h.ActorHID),             // FixedString(32)
+			lang,                           // Nullable(String)
+			h.Term,                         // String
+			h.Category,                     // Enum8 string (label)
+			h.Severity,                     // Enum8 string (label)
+			h.SpanStart,                    // Int32
+			h.SpanEnd,                      // Int32
+			h.DetectorVersion,              // Int32
+			batchID,                        // ingest_batch_id (UInt64)
+			batchID,                        // ver (ReplacingMergeTree version; same hash = idempotent)
 		})
 	}
 
@@ -287,4 +291,36 @@ func coalesce(s, def string) string {
 		return def
 	}
 	return s
+}
+
+func batchID64(xs []dom.HitWrite) uint64 {
+	const N = 32
+	h := fnv.New64a()
+	n := len(xs)
+	if n > N {
+		n = N
+	}
+	var buf [8]byte
+	for i := 0; i < n; i++ {
+		x := xs[i]
+		_, _ = h.Write([]byte(x.UtteranceID))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write([]byte(x.Term))
+		_, _ = h.Write([]byte{0})
+
+		binary.LittleEndian.PutUint32(buf[0:], uint32(x.SpanStart))
+		binary.LittleEndian.PutUint32(buf[4:], uint32(x.SpanEnd))
+		_, _ = h.Write(buf[:])
+
+		// Category & Severity are strings; include full labels
+		if x.Category != "" {
+			_, _ = h.Write([]byte(x.Category))
+		}
+		_, _ = h.Write([]byte{0})
+		if x.Severity != "" {
+			_, _ = h.Write([]byte(x.Severity))
+		}
+		_, _ = h.Write([]byte{0})
+	}
+	return h.Sum64()
 }
