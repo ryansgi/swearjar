@@ -130,6 +130,10 @@ func (rd *Reader) Next() (EventEnvelope, error) {
 			// Skip malformed/legacy lines when fail-fast is off
 			continue
 		}
+
+		// fill name/login & synthesize negative IDs when missing
+		env.FillSyntheticIDs()
+
 		rd.events++
 		rd.bytes += int64(len(cp) + 1) // include newline
 		return env, nil
