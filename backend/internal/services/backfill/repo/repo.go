@@ -143,8 +143,7 @@ func (s *hybridStore) LookupIDs(ctx context.Context, keys []domain.UKey) (map[do
 
 	var sb strings.Builder
 	sb.WriteString(`
-	  SELECT event_id, toString(source) AS source, ordinal,
-	         any(id) AS id, any(lang_code) AS lang_code
+	  SELECT event_id, toString(source) AS source, ordinal, any(id) AS id, any(lang_code) AS lang_code
 	  FROM swearjar.utterances
 	  WHERE (event_id, toString(source), ordinal) IN (`)
 	for i, k := range keys {
@@ -209,4 +208,47 @@ func coerceSource(s string) string {
 		return "comment"
 	}
 	return ls
+}
+
+func (s *hybridStore) PreseedHours(ctx context.Context, startUTC, endUTC time.Time) (int, error) {
+	const sql = `
+		INSERT INTO ingest_hours (hour_utc, status)
+		SELECT h, 'pending'
+		FROM generate_series($1::timestamptz, $2::timestamptz, '1 hour') AS g(h)
+		ON CONFLICT (hour_utc) DO NOTHING
+	`
+	res, err := s.pg.Exec(ctx, sql, startUTC.UTC(), endUTC.UTC())
+	if err != nil {
+		return 0, err
+	}
+	n := res.RowsAffected()
+	return int(n), nil
+}
+
+// NextHourToProcess atomically claims the next pending or errored hour in the given range
+// and marks it as running. Uses SELECT ... FOR UPDATE SKIP LOCKED to avoid conflicts
+func (s *hybridStore) NextHourToProcess(ctx context.Context, startUTC, endUTC time.Time) (time.Time, bool, error) {
+	// We pick the oldest hour in range that is pending or errored and not currently locked
+	// The UPDATE acquires row lock via the CTE reference with SKIP LOCKED semantics
+	const sql = `
+		WITH next AS (
+			SELECT hour_utc FROM ingest_hours
+			WHERE hour_utc BETWEEN $1 AND $2 AND status IN ('pending','error')
+			ORDER BY hour_utc LIMIT 1 FOR UPDATE SKIP LOCKED
+		)
+		UPDATE ingest_hours ih
+		SET status = 'running', started_at = now(), error = NULL, finished_at = NULL
+		FROM next WHERE ih.hour_utc = next.hour_utc
+		RETURNING ih.hour_utc
+	`
+	row := s.pg.QueryRow(ctx, sql, startUTC.UTC(), endUTC.UTC())
+	var hr time.Time
+	if err := row.Scan(&hr); err != nil {
+		// No rows -> no work left
+		if strings.Contains(err.Error(), "no rows") {
+			return time.Time{}, false, nil
+		}
+		return time.Time{}, false, err
+	}
+	return hr.UTC(), true, nil
 }

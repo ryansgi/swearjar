@@ -4,7 +4,6 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"math/rand"
 	"strings"
@@ -127,63 +126,89 @@ func (s *Service) RunRange(ctx context.Context, start, end time.Time) error {
 		return errors.New("range exceeds MaxRangeHours")
 	}
 
-	hrs := enumerate(start, end)
-	w := max(s.Cfg.Workers, 1)
-
-	// Sequential path
-	if w == 1 {
-		var fails int64
-		for _, hr := range hrs {
-			if err := s.runHourWithRetry(ctx, hr); err != nil {
-				fmt.Println(err)
-				atomic.AddInt64(&fails, 1)
-			}
-			if s.Cfg.DelayPerHour > 0 {
-				if err := sleepCtx(ctx, s.Cfg.DelayPerHour); err != nil {
-					fmt.Println(err)
-					return err
-				}
-			}
-		}
-		if fails > 0 {
-			return errors.New("some hours failed")
-		}
-		return nil
+	// Pre-seed all hours into ingest_hours up front
+	if err := s.DB.Tx(ctx, func(q repokit.Queryer) error {
+		applyTxTuning(ctx, q)
+		_, err := s.Binder.Bind(q).PreseedHours(ctx, start, end)
+		return err
+	}); err != nil {
+		return err
 	}
 
-	// Worker pool
+	// Start workers that repeatedly claim the next hour and process it
+	w := max(s.Cfg.Workers, 1)
 	var fails int64
-	sem := make(chan struct{}, w)
 	var wg sync.WaitGroup
-	for _, hr := range hrs {
-		select {
-		case <-ctx.Done():
-			wg.Wait()
-			return ctx.Err()
-		case sem <- struct{}{}:
-		}
-		wg.Add(1)
-		go func() {
-			defer func() { <-sem; wg.Done() }()
-			if err := s.runHourWithRetry(ctx, hr); err != nil {
-				logger.C(ctx).
-					Error().
-					Time("hour", hr.UTC()).
-					Err(err).
-					Msg("backfill: runHour failed")
+	sem := make(chan struct{}, w)
 
+	worker := func() {
+		defer func() { <-sem; wg.Done() }()
+		for {
+			// Claim next hour; break when none left
+			hr, ok, err := s.nextHour(ctx, start, end)
+			if err != nil {
+				logger.C(ctx).Error().Err(err).Msg("backfill: NextHourToProcess failed")
+				atomic.AddInt64(&fails, 1)
+				// Small pause on coordinator error (avoid hot loop)
+				_ = sleepCtx(ctx, 500*time.Millisecond)
+				continue
+			}
+			if !ok {
+				return // no more work in range
+			}
+			// Process with retry; honors advisory Lease if configured
+			if err := s.runHourWithRetry(ctx, domain.HourRef{
+				Year:  hr.Year(),
+				Month: int(hr.Month()),
+				Day:   hr.Day(),
+				Hour:  hr.Hour(),
+			}); err != nil {
+				logger.C(ctx).Error().Time("hour", hr).Err(err).Msg("backfill: runHour failed")
 				atomic.AddInt64(&fails, 1)
 			}
+			// Optional pacing per worker
 			if s.Cfg.DelayPerHour > 0 {
 				_ = sleepCtx(ctx, s.Cfg.DelayPerHour)
 			}
-		}()
+		}
+	}
+
+	// Launch the pool
+	for range w {
+		select {
+		case <-ctx.Done():
+			wg.Wait()
+			if fails > 0 {
+				return ctx.Err()
+			}
+			return nil
+		case sem <- struct{}{}:
+		}
+		wg.Add(1)
+		go worker()
 	}
 	wg.Wait()
+
 	if fails > 0 {
 		return errors.New("some hours failed")
 	}
 	return nil
+}
+
+func (s *Service) nextHour(ctx context.Context, start, end time.Time) (time.Time, bool, error) {
+	var hr time.Time
+	var ok bool
+	err := s.DB.Tx(ctx, func(q repokit.Queryer) error {
+		applyTxTuning(ctx, q)
+		h, claimed, e := s.Binder.Bind(q).NextHourToProcess(ctx, start, end)
+		if e != nil {
+			return e
+		}
+		hr = h
+		ok = claimed
+		return nil
+	})
+	return hr, ok, err
 }
 
 func (s *Service) runHourWithRetry(ctx context.Context, hr domain.HourRef) error {
@@ -538,19 +563,6 @@ func (s *Service) insertBatchRobust(ctx context.Context, batch []domain.Utteranc
 	}
 	rIns, rDd, rErr := s.insertBatchRobust(ctx, batch[mid:])
 	return totIns + lIns + rIns, totDd + lDd + rDd, rErr
-}
-
-func enumerate(start, end time.Time) []domain.HourRef {
-	var out []domain.HourRef
-	for cur := start; !cur.After(end); cur = cur.Add(time.Hour) {
-		out = append(out, domain.HourRef{
-			Year:  cur.Year(),
-			Month: int(cur.Month()),
-			Day:   cur.Day(),
-			Hour:  cur.Hour(),
-		})
-	}
-	return out
 }
 
 func coarse(s string) string {

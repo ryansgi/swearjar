@@ -27,6 +27,15 @@ type StorageRepo interface {
 	// LookupIDs resolves DB UUIDs (as text) for the given natural keys.
 	// The result is a map from UKey -> utterances.id::text
 	LookupIDs(ctx context.Context, keys []UKey) (map[UKey]LookupRow, error)
+
+	// Bulk-seed ingest_hours with status 'pending'
+	// Returns number of rows inserted (ignores conflicts)
+	PreseedHours(ctx context.Context, startUTC, endUTC time.Time) (int, error)
+
+	// Atomically claim the next hour in [startUTC, endUTC] to process.
+	// Uses SELECT ... FOR UPDATE SKIP LOCKED to mark the hour as running.
+	// Returns (hour, true, nil) when an hour was claimed; (time.Time{}, false, nil) when none remain in range
+	NextHourToProcess(ctx context.Context, startUTC, endUTC time.Time) (time.Time, bool, error)
 }
 
 // LookupRow is what LookupIDs returns per natural key
