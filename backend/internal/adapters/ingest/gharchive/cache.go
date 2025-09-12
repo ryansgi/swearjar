@@ -2,7 +2,7 @@ package gharchive
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -354,8 +354,13 @@ func loadMeta(path string) (*cacheMeta, error) {
 				Msg("gharchive: error closing meta file")
 		}
 	}()
+
+	b, err := io.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
 	var m cacheMeta
-	if err := json.NewDecoder(f).Decode(&m); err != nil {
+	if err := json.Unmarshal(b, &m); err != nil {
 		return nil, err
 	}
 	return &m, nil
@@ -364,20 +369,20 @@ func loadMeta(path string) (*cacheMeta, error) {
 // saveMeta writes the sidecar json atomically
 func saveMeta(path string, m *cacheMeta) error {
 	tmp := path + ".part"
-	f, err := os.Create(tmp)
+
+	b, err := json.Marshal(m) // or MarshalIndent(m, "", "  ") if you want pretty
 	if err != nil {
 		return err
 	}
-	if err := json.NewEncoder(f).Encode(m); err != nil {
-		_ = f.Close()
+
+	if err := os.WriteFile(tmp, b, 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
 		_ = os.Remove(tmp)
 		return err
 	}
-	if err := f.Close(); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-	return os.Rename(tmp, path)
+	return nil
 }
 
 // maybeCleanup throttles retention cleanup to once per ten minutes

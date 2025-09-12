@@ -21,6 +21,12 @@ const (
 	sampleRawMax     = 2048 // max bytes of raw JSON to log for the sample
 )
 
+// ReaderOptions configures Reader behavior
+type ReaderOptions struct {
+	LogFirstLine     bool // log the very first raw line (even if it fails to decode)
+	FailOnFirstError bool // return error on first json decode failure
+}
+
 // Fetcher fetches a reader for a given hour
 type Fetcher interface {
 	Fetch(ctx context.Context, hour HourRef) (io.ReadCloser, error)
@@ -68,11 +74,12 @@ type Reader struct {
 	err     error
 	events  int
 	bytes   int64
-	sampled bool // logs exactly one sample raw line per gzip
+	sampled bool
+	opts    ReaderOptions
 }
 
 // NewReader creates a new Reader from the given ReadCloser
-func NewReader(r io.ReadCloser) (*Reader, error) {
+func NewReader(r io.ReadCloser, opts ReaderOptions) (*Reader, error) {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
 		if cerr := r.Close(); cerr != nil {
@@ -83,7 +90,7 @@ func NewReader(r io.ReadCloser) (*Reader, error) {
 	sc := bufio.NewScanner(gz)
 	buf := make([]byte, 512*1024)
 	sc.Buffer(buf, maxScanTokenSize)
-	return &Reader{r: r, gz: gz, sc: sc}, nil
+	return &Reader{r: r, gz: gz, sc: sc, opts: opts}, nil
 }
 
 // Next reads the next event; returns io.EOF when done
@@ -104,16 +111,8 @@ func (rd *Reader) Next() (EventEnvelope, error) {
 		cp := make([]byte, len(line))
 		copy(cp, line)
 
-		var env EventEnvelope
-		if err := json.Unmarshal(cp, &env); err != nil {
-			// skip malformed lines
-			continue
-		}
-		rd.events++
-		rd.bytes += int64(len(cp) + 1) // include newline
-
-		// Log a single raw-line sample (first valid JSON line in this gzip)
-		if !rd.sampled {
+		// Log *first* raw line (even if invalid) if requested
+		if rd.opts.LogFirstLine && !rd.sampled {
 			rd.sampled = true
 			l := logger.Named("gharchive")
 			l.Debug().
@@ -122,6 +121,17 @@ func (rd *Reader) Next() (EventEnvelope, error) {
 				Msg("gharchive: sample raw line")
 		}
 
+		var env EventEnvelope
+		if err := json.Unmarshal(cp, &env); err != nil {
+			if rd.opts.FailOnFirstError {
+				rd.err = fmt.Errorf("gharchive: decode error after %d events: %w", rd.events, err)
+				return EventEnvelope{}, rd.err
+			}
+			// Skip malformed/legacy lines when fail-fast is off
+			continue
+		}
+		rd.events++
+		rd.bytes += int64(len(cp) + 1) // include newline
 		return env, nil
 	}
 }
