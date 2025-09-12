@@ -26,9 +26,10 @@ Backfill resume)
 
 - docker exec -it sw_api bash -c 'GOEXPERIMENT=jsonv2 go run ./cmd/swearjar-backfill --resume'
 
-Around when data started breaking) `2012-03-10-00` to `2012-04-04-12-00`
+# Around when data started breaking) `2012-03-10-00` to `2012-04-04-12-00`
 
-- docker exec -it sw_api bash -c 'GOEXPERIMENT=jsonv2 go run ./cmd/swearjar-backfill -start 2012-03-10T00 -end 2012-04-04T00'
+- docker exec -it sw_api bash -c 'GOEXPERIMENT=jsonv2 go run ./cmd/swearjar-backfill -start 2012-03-10T00 -end 2025-09-11T00'
+docker exec -it sw_api bash -c 'GOEXPERIMENT=jsonv2 go run ./cmd/swearjar-detect -start 2012-03-10T00 -end 2025-09-11T00'
 
 # Starting to validate the concept... Win
 
