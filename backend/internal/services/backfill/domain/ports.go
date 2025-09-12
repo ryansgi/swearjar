@@ -28,10 +28,6 @@ type StorageRepo interface {
 	// It is recommended to batch inserts (e.g. 1000s of rows) for performance
 	InsertUtterances(ctx context.Context, us []Utterance) (inserted, deduped int, err error)
 
-	// LookupIDs resolves DB UUIDs (as text) for the given natural keys.
-	// The result is a map from UKey -> utterances.id::text
-	LookupIDs(ctx context.Context, keys []UKey) (map[UKey]LookupRow, error)
-
 	// Bulk-seed ingest_hours with status 'pending'
 	// Returns number of rows inserted (ignores conflicts)
 	PreseedHours(ctx context.Context, startUTC, endUTC time.Time) (int, error)

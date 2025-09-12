@@ -24,23 +24,21 @@ func (extractor) FromEvent(env domain.EventEnvelope, n domain.Normalizer) []doma
 		actor := sjnorm.Sanitize(u.Actor)
 		source := sjnorm.Sanitize(u.Source)          // mostly internal values, still safe to sanitize
 		sourceDet := sjnorm.Sanitize(u.SourceDetail) // may contain titles, paths, etc.
-		textRaw := sjnorm.Sanitize(u.TextRaw)        // critical: avoid NULLs in TEXT
+		textRaw := sjnorm.Sanitize(u.TextRaw)
 
 		out = append(out, domain.Utterance{
-			EventID:   u.EventID,
-			EventType: u.EventType,
-
-			Repo:    repo,
-			RepoID:  env.Repo.ID,
-			Actor:   actor,
-			ActorID: env.Actor.ID,
-
-			CreatedAt:    u.CreatedAt,
-			Source:       source,
-			SourceDetail: sourceDet,
-
+			UtteranceID:    u.UtteranceID,
+			EventType:      u.EventType,
+			Repo:           repo,
+			RepoID:         env.Repo.ID,
+			Actor:          actor,
+			ActorID:        env.Actor.ID,
+			CreatedAt:      u.CreatedAt,
+			Source:         source,
+			SourceDetail:   sourceDet,
 			TextRaw:        textRaw,
 			TextNormalized: u.TextNormalized, // already sanitized via Normalizer.Normalize
+			Ordinal:        u.Ordinal,
 		})
 	}
 	return out

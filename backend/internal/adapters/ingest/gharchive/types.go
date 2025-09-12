@@ -63,7 +63,7 @@ type Repo struct {
 
 // EventEnvelope is one GHArchive line as an envelope
 type EventEnvelope struct {
-	ID        string  `json:"id"`
+	ID        DeterministicUUID
 	Type      string  `json:"type"`
 	Public    Boolish `json:"public"`
 	Actor     Actor   `json:"actor"`
@@ -82,7 +82,7 @@ func (e *EventEnvelope) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	_ = json.Unmarshal(raw["id"], &e.ID)
+	// We no longer use the event id
 	_ = json.Unmarshal(raw["type"], &e.Type)
 	_ = json.Unmarshal(raw["public"], &e.Public)
 
@@ -170,7 +170,20 @@ func (e *EventEnvelope) UnmarshalJSON(data []byte) error {
 			_ = json.Unmarshal(legacy["id"], &rID)
 		}
 	}
+	// Extra fallback: derive owner/repo from URL if name is empty or "/"
+
+	if (rName == "" || rName == "/") && rURL != "" {
+		if rr, ok := ownerRepoFromURL(rURL); ok {
+			rName = rr
+		}
+	}
+
+	// Always canonicalize the repo name we keep
+	if rName != "" {
+		rName = CanonRepoName(rName)
+	}
 	e.Repo = Repo{Name: rName, ID: rID, URL: rURL}
+
 	return nil
 }
 
