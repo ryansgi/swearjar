@@ -18,7 +18,6 @@ type Normalizer interface {
 // Utterance is what the detector ingests and the store persists
 type Utterance struct {
 	UtteranceID    string
-	EventID        string
 	EventType      string
 	Repo           string // owner/name
 	Actor          string // login
@@ -29,13 +28,45 @@ type Utterance struct {
 	TextNormalized string
 	LangCode       string // optional; empty => NULL
 	Script         string // optional; empty => NULL
+	Ordinal        int
 }
 
 // FromEvent extracts utterances from a GitHub event envelope
 func FromEvent(env gharchive.EventEnvelope, norm Normalizer) []Utterance {
 	var outs []Utterance
 
-	add := func(source, txt string) {
+	// keep a stable per-source ordinal for this event
+	ord := map[string]int{}
+
+	coarseOf := func(detail string) string {
+		if i := strings.IndexByte(detail, ':'); i > 0 {
+			switch detail[:i] {
+			case "push":
+				return "commit"
+			case "issues", "issue_comment":
+				return "issue"
+			case "pr", "pr_review_comment":
+				return "pr"
+			case "commit_comment":
+				return "comment"
+			}
+		}
+		// fallback: map known event types to coarse buckets
+		switch env.Type {
+		case "PushEvent":
+			return "commit"
+		case "IssuesEvent", "IssueCommentEvent":
+			return "issue"
+		case "PullRequestEvent", "PullRequestReviewCommentEvent":
+			return "pr"
+		case "CommitCommentEvent":
+			return "comment"
+		default:
+			return "comment"
+		}
+	}
+
+	add := func(detail, txt string) {
 		t := strings.TrimSpace(txt)
 		if t == "" {
 			return
@@ -50,18 +81,25 @@ func FromEvent(env gharchive.EventEnvelope, norm Normalizer) []Utterance {
 
 		script, lang := langhint.DetectScriptAndLang(normed)
 
+		// increment ordinal for this granular source
+		ord[detail]++
+		ordinal := ord[detail]
+
+		// build deterministic utterance ID from the envelope's raw payload + (detail, ordinal)
+		uuid := env.DeterministicUUID(detail, ordinal)
 		u := Utterance{
-			EventID:        env.ID,
+			UtteranceID:    uuid.String(),
 			EventType:      env.Type,
 			Repo:           env.Repo.Name,
 			Actor:          env.Actor.Login,
-			CreatedAt:      env.CreatedAt,
-			Source:         source,
-			SourceDetail:   source,
+			CreatedAt:      time.Time(env.CreatedAt),
+			Source:         coarseOf(detail), // coarse bucket for enums/analytics
+			SourceDetail:   detail,           // granular selector
 			TextRaw:        t,
 			TextNormalized: normed,
 			LangCode:       lang,
 			Script:         script,
+			Ordinal:        ordinal,
 		}
 
 		outs = append(outs, u)
