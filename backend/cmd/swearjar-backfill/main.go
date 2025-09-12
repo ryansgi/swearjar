@@ -58,12 +58,19 @@ func main() {
 	}()
 
 	var (
-		fStart  = flag.String("start", "", "UTC start hour YYYY-MM-DDTHH")
-		fEnd    = flag.String("end", "", "UTC end hour YYYY-MM-DDTHH inclusive")
-		fDetect = flag.Bool("detect", false, "also run detection and write hits during backfill")
-		fDetVer = flag.Int("detver", 1, "detector version to stamp into hits (when --detect)")
+		fStart    = flag.String("start", "", "UTC start hour YYYY-MM-DDTHH")
+		fEnd      = flag.String("end", "", "UTC end hour YYYY-MM-DDTHH inclusive")
+		fDetect   = flag.Bool("detect", false, "also run detection and write hits during backfill")
+		fDetVer   = flag.Int("detver", 1, "detector version to stamp into hits (when --detect)")
+		fPlanOnly = flag.Bool("plan-only", false, "seed ingest_hours for the range and exit without processing")
+		fResume   = flag.Bool("resume", false, "ignore -start/-end and drain any pending/error hours")
 	)
 	flag.Parse()
+
+	// Validate flag combos
+	if *fPlanOnly && *fResume {
+		l.Panic().Msg("--plan-only and --resume are mutually exclusive")
+	}
 
 	if *fStart == "" || *fEnd == "" {
 		l.Panic().Msg("must provide -start and -end")
@@ -121,7 +128,23 @@ func main() {
 
 	// Run backfill
 	ports := bf.Ports().(backfillmod.Ports)
-	if err := ports.Runner.RunRange(context.Background(), start.UTC(), end.UTC()); err != nil {
-		l.Fatal().Err(err).Msg("backfill failed")
+	ctx := context.Background()
+	switch {
+	case *fPlanOnly:
+		if err := ports.Runner.PlanRange(ctx, start.UTC(), end.UTC()); err != nil {
+			l.Fatal().Err(err).Msg("backfill plan-only failed")
+		}
+		return
+
+	case *fResume:
+		if err := ports.Runner.RunResume(ctx); err != nil {
+			l.Fatal().Err(err).Msg("backfill resume failed")
+		}
+		return
+
+	default:
+		if err := ports.Runner.RunRange(ctx, start.UTC(), end.UTC()); err != nil {
+			l.Fatal().Err(err).Msg("backfill failed")
+		}
 	}
 }

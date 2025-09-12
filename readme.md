@@ -24,6 +24,14 @@ GROUP BY database, table
 ORDER BY sum(bytes) DESC;
 ```
 
-Backfill
+Backfill ALL)
 
-docker exec -it sw_api bash -c 'GOEXPERIMENT=jsonv2 go run ./cmd/swearjar-backfill -start 2011-02-12T00 -end 2025-09-11T00 --detect --detver 1'
+- docker exec -it sw_api bash -c 'GOEXPERIMENT=jsonv2 go run ./cmd/swearjar-backfill -start 2011-02-12T00 -end 2025-09-11T00 --detect --detver 1'
+
+Backfill plan only)
+
+- docker exec -it sw_api bash -c 'GOEXPERIMENT=jsonv2 go run ./cmd/swearjar-backfill -start 2011-02-12T00 -end 2011-03-01T00 --plan-only'
+
+Backfill resume)
+
+- docker exec -it sw_api bash -c 'GOEXPERIMENT=jsonv2 go run ./cmd/swearjar-backfill --resume'

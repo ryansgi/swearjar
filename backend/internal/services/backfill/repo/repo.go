@@ -252,3 +252,26 @@ func (s *hybridStore) NextHourToProcess(ctx context.Context, startUTC, endUTC ti
 	}
 	return hr.UTC(), true, nil
 }
+
+func (s *hybridStore) NextHourToProcessAny(ctx context.Context) (time.Time, bool, error) {
+	const sql = `
+		WITH next AS (
+			SELECT hour_utc FROM ingest_hours WHERE status IN ('pending','error')
+			ORDER BY hour_utc LIMIT 1
+			FOR UPDATE SKIP LOCKED
+		)
+		UPDATE ingest_hours ih
+		SET status = 'running', started_at = now(), error = NULL, finished_at = NULL
+		FROM next WHERE ih.hour_utc = next.hour_utc
+		RETURNING ih.hour_utc
+	`
+	row := s.pg.QueryRow(ctx, sql)
+	var hr time.Time
+	if err := row.Scan(&hr); err != nil {
+		if strings.Contains(err.Error(), "no rows") {
+			return time.Time{}, false, nil
+		}
+		return time.Time{}, false, err
+	}
+	return hr.UTC(), true, nil
+}

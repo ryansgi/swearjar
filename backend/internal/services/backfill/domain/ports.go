@@ -9,6 +9,10 @@ import (
 // RunnerPort is public port exposed by the module (what other modules would call)
 type RunnerPort interface {
 	RunRange(ctx context.Context, start, end time.Time) error
+
+	PlanRange(ctx context.Context, start, end time.Time) error
+
+	RunResume(ctx context.Context) error
 }
 
 // StorageRepo is the storage repository interface
@@ -36,6 +40,8 @@ type StorageRepo interface {
 	// Uses SELECT ... FOR UPDATE SKIP LOCKED to mark the hour as running.
 	// Returns (hour, true, nil) when an hour was claimed; (time.Time{}, false, nil) when none remain in range
 	NextHourToProcess(ctx context.Context, startUTC, endUTC time.Time) (time.Time, bool, error)
+
+	NextHourToProcessAny(ctx context.Context) (time.Time, bool, error)
 }
 
 // LookupRow is what LookupIDs returns per natural key

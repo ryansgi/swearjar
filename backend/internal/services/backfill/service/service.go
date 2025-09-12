@@ -115,6 +115,92 @@ func New(
 	}
 }
 
+// PlanRange seeds ingest_hours without processing
+func (s *Service) PlanRange(ctx context.Context, start, end time.Time) error {
+	start = start.Truncate(time.Hour).UTC()
+	end = end.Truncate(time.Hour).UTC()
+	if end.Before(start) {
+		return errors.New("end before start")
+	}
+	return s.DB.Tx(ctx, func(q repokit.Queryer) error {
+		applyTxTuning(ctx, q)
+		_, err := s.Binder.Bind(q).PreseedHours(ctx, start, end)
+		return err
+	})
+}
+
+// RunResume drains any pending/error hours globally, ignoring bounds
+func (s *Service) RunResume(ctx context.Context) error {
+	w := max(s.Cfg.Workers, 1)
+	var fails int64
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, w)
+
+	worker := func() {
+		defer func() { <-sem; wg.Done() }()
+		for {
+			hr, ok, err := s.nextHourAny(ctx)
+			if err != nil {
+				logger.C(ctx).Error().Err(err).Msg("backfill: NextHourToProcessAny failed")
+				atomic.AddInt64(&fails, 1)
+				_ = sleepCtx(ctx, 500*time.Millisecond)
+				continue
+			}
+			if !ok {
+				return // nothing left
+			}
+			if err := s.runHourWithRetry(ctx, domain.HourRef{
+				Year:  hr.Year(),
+				Month: int(hr.Month()),
+				Day:   hr.Day(),
+				Hour:  hr.Hour(),
+			}); err != nil {
+				logger.C(ctx).Error().Time("hour", hr).Err(err).Msg("backfill: runHour failed")
+				atomic.AddInt64(&fails, 1)
+			}
+			if s.Cfg.DelayPerHour > 0 {
+				_ = sleepCtx(ctx, s.Cfg.DelayPerHour)
+			}
+		}
+	}
+
+	for i := 0; i < w; i++ {
+		select {
+		case <-ctx.Done():
+			wg.Wait()
+			if fails > 0 {
+				return ctx.Err()
+			}
+			return nil
+		case sem <- struct{}{}:
+		}
+		wg.Add(1)
+		go worker()
+	}
+	wg.Wait()
+	if fails > 0 {
+		return errors.New("some hours failed")
+	}
+	return nil
+}
+
+// helper: claim next hour anywhere
+func (s *Service) nextHourAny(ctx context.Context) (time.Time, bool, error) {
+	var hr time.Time
+	var ok bool
+	err := s.DB.Tx(ctx, func(q repokit.Queryer) error {
+		applyTxTuning(ctx, q)
+		h, claimed, e := s.Binder.Bind(q).NextHourToProcessAny(ctx)
+		if e != nil {
+			return e
+		}
+		hr = h
+		ok = claimed
+		return nil
+	})
+	return hr, ok, err
+}
+
 // RunRange implements domain.RunnerPort
 func (s *Service) RunRange(ctx context.Context, start, end time.Time) error {
 	start = start.Truncate(time.Hour).UTC()
