@@ -29,11 +29,7 @@ type ListInput struct {
 type Row struct {
 	ID           string // uuid
 	CreatedAt    time.Time
-	RepoName     string
-	RepoID       int64
 	RepoHID      []byte
-	ActorLogin   string
-	ActorID      int64
 	ActorHID     []byte
 	Source       string // source_enum
 	SourceDetail string
