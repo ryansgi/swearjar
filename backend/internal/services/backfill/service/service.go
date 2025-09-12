@@ -495,49 +495,31 @@ func (s *Service) runHourUnlocked(ctx context.Context, hr domain.HourRef) (retEr
 	}
 	dbMS += int(time.Since(t2).Milliseconds())
 
-	// Detection (optional)
+	// Detection (optional) - uses utterance IDs directly; no CH lookups
 	if s.Cfg.DetectEnabled && s.Detect != nil && len(all) > 0 {
-		type kkey struct{ eventID, source string }
-		counts := make(map[kkey]int, len(all))
-		keys := make([]domain.UKey, 0, len(all))
-		for _, u := range all {
-			k := kkey{eventID: u.EventID, source: u.Source}
-			counts[k]++
-			ord := counts[k] - 1
-			keys = append(keys, domain.UKey{
-				EventID: u.EventID,
-				Source:  u.Source,
-				Ordinal: ord,
-			})
-		}
-
-		var idMap map[domain.UKey]domain.LookupRow
-		if err := s.DB.Tx(hrCtx, func(q repokit.Queryer) error {
-			var e error
-			idMap, e = s.Binder.Bind(q).LookupIDs(hrCtx, keys)
-			return e
-		}); err != nil {
-			retErr = err
-			return
-		}
-
 		wbatch := make([]detectdom.WriteInput, 0, len(all))
-		for i, u := range all {
-			k := keys[i]
-			got := idMap[k]
-			if got.ID == "" || u.TextNormalized == "" {
+		for _, u := range all {
+			if u.UtteranceID == "" || u.TextNormalized == "" {
 				continue
 			}
+			var lang *string
+			if u.LangCode != nil {
+				if v := strings.TrimSpace(*u.LangCode); v != "" {
+					lang = &v
+				}
+			}
+
 			wbatch = append(wbatch, detectdom.WriteInput{
-				UtteranceID: got.ID,
+				UtteranceID: u.UtteranceID,
 				TextNorm:    u.TextNormalized,
 				CreatedAt:   u.CreatedAt,
 				Source:      u.Source,
 				RepoHID:     identdom.RepoHID32(u.RepoID).Bytes(),
 				ActorHID:    identdom.ActorHID32(u.ActorID).Bytes(),
-				LangCode:    got.LangCode,
+				LangCode:    lang, // if nil, detect pipeline can infer or CH defaults will handle
 			})
 		}
+
 		if len(wbatch) > 0 {
 			wchunk := chunk
 			if wchunk <= 0 {
