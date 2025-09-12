@@ -15,12 +15,11 @@ type Input struct {
 
 // WriteInput is the minimal per-utterance payload detect needs to compute & persist hits
 type WriteInput struct {
-	UtteranceID string
-	TextNorm    string
-	// denorm copied onto hits for hot filters
-	CreatedAt time.Time
-	Source    string // source_enum (as text)
-	RepoHID   []byte
-	ActorHID  []byte
-	LangCode  *string
+	UtteranceID string    // required
+	TextNorm    string    // required (already normalized upstream)
+	CreatedAt   time.Time // required (for partitioning/TTL)
+	Source      string    // "commit" | "issue" | "pr" | "comment"
+	RepoHID     []byte    // len=32, FixedString(32)
+	ActorHID    []byte    // len=32, FixedString(32)
+	LangCode    *string   // optional (nil => unknown/auto)
 }
