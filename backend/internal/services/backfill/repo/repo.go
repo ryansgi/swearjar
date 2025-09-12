@@ -3,7 +3,10 @@ package repo
 
 import (
 	"context"
-	"fmt"
+	"crypto/sha256"
+	"encoding/binary"
+	"io"
+	"sort"
 	"strings"
 	"time"
 
@@ -15,7 +18,7 @@ import (
 
 // NewHybrid returns a binder that uses:
 //   - Postgres (via the provided Queryer) for hour accounting (ingest_hours)
-//   - ClickHouse (provided here) for facts (utterances) and lookups
+//   - ClickHouse (provided here) for facts (utterances)
 func NewHybrid(ch store.Clickhouse) repokit.Binder[domain.StorageRepo] {
 	return &hybridBinder{ch: ch}
 }
@@ -26,10 +29,10 @@ func (b *hybridBinder) Bind(q repokit.Queryer) domain.StorageRepo {
 	return &hybridStore{pg: q, ch: b.ch}
 }
 
-// hybridStore uses PG for ingest_hours and CH for utterances facts/lookups
+// hybridStore uses PG for ingest_hours and CH for utterances facts
 type hybridStore struct {
 	pg repokit.Queryer  // Postgres: ingest_hours
-	ch store.Clickhouse // ClickHouse: utterances (facts) + lookups
+	ch store.Clickhouse // ClickHouse: utterances (facts)
 }
 
 func (s *hybridStore) StartHour(ctx context.Context, hour time.Time) error {
@@ -67,38 +70,39 @@ func (s *hybridStore) FinishHour(ctx context.Context, hour time.Time, fin domain
 }
 
 // InsertUtterances writes a batch into ClickHouse.
+// IDs MUST be precomputed deterministically by the caller (extractor).
 // NOTE: consent gating should happen before this call
 func (s *hybridStore) InsertUtterances(ctx context.Context, us []domain.Utterance) (int, int, error) {
 	if len(us) == 0 {
 		return 0, 0, nil
 	}
 
-	// Assign ordinals per (event_id, source)
-	type k struct{ ev, src string }
-	counts := map[k]int{}
-	batch := make([]domain.Utterance, 0, len(us))
-	for _, u := range us {
-		if u.RepoID == 0 || u.ActorID == 0 {
-			continue
+	batchHour := us[0].CreatedAt.Truncate(time.Hour).UTC()
+	for i := 1; i < len(us); i++ {
+		h := us[i].CreatedAt.Truncate(time.Hour).UTC()
+		if h.Before(batchHour) {
+			batchHour = h
 		}
-		key := k{u.EventID, u.Source}
-		counts[key]++
-		u.Ordinal = counts[key] - 1
-		batch = append(batch, u)
 	}
-	if len(batch) == 0 {
-		return 0, 0, nil
-	}
+	ingestBatchID := contentStableBatchID(us, 64)
 
-	// Insert column list (omit `id` so CH uses DEFAULT generateUUIDv7())
+	// Prepare rows; skip incomplete records (missing repo/actor or ID)
 	const tableWithCols = "swearjar.utterances (" +
-		"event_id, event_type, repo_hid, actor_hid, hid_key_version," +
+		"id, event_type, repo_hid, actor_hid, hid_key_version," +
 		"created_at, source, source_detail, ordinal, text_raw, text_normalized," +
 		"ingest_batch_id, ver" +
 		")"
 
-	rows := make([][]any, 0, len(batch))
-	for _, u := range batch {
+	rows := make([][]any, 0, len(us))
+	for _, u := range us {
+		// Guard: CH facts require resolved HIDs + deterministic ID
+		if u.RepoID == 0 || u.ActorID == 0 {
+			continue
+		}
+		if strings.TrimSpace(u.UtteranceID) == "" {
+			continue
+		}
+
 		repoRaw := []byte(identdom.RepoHID32(u.RepoID).Bytes())    // []byte, len=32
 		actorRaw := []byte(identdom.ActorHID32(u.ActorID).Bytes()) // []byte, len=32
 
@@ -111,81 +115,33 @@ func (s *hybridStore) InsertUtterances(ctx context.Context, us []domain.Utteranc
 		}
 
 		row := []any{
-			u.EventID,              // event_id (String)
-			u.EventType,            // event_type (String/Enum)
-			repoRaw,                // repo_hid (FixedString(32))
-			actorRaw,               // actor_hid (FixedString(32))
-			1,                      // hid_key_version
-			u.CreatedAt.UTC(),      // created_at (DateTime64(3))
-			coerceSource(u.Source), // source (Enum8) - string ok
-			zeroIfEmpty(u.SourceDetail, u.Source),
-			int32(u.Ordinal), // ordinal (Int32)
-			u.TextRaw,        // text_raw
-			norm,             // text_normalized (Nullable(String))
-			0,                // ingest_batch_id
-			0,                // ver
+			u.UtteranceID,                         // id (UUID as string acceptable for CH UUID)
+			u.EventType,                           // event_type (String)
+			repoRaw,                               // repo_hid (FixedString(32))
+			actorRaw,                              // actor_hid (FixedString(32))
+			1,                                     // hid_key_version
+			u.CreatedAt.UTC(),                     // created_at (DateTime64(3))
+			coerceSource(u.Source),                // source (Enum8) - string ok
+			zeroIfEmpty(u.SourceDetail, u.Source), // source_detail (String) - fallback to coarse source if empty
+			int32(u.Ordinal),                      // ordinal (Int32) - already assigned by extractor
+			u.TextRaw,                             // text_raw
+			norm,                                  // text_normalized (Nullable(String))
+			ingestBatchID,                         // ingest_batch_id
+			ingestBatchID,                         // looks like a mistake, but its for ReplacingMergeTree(ver)
 		}
 		rows = append(rows, row)
+	}
+
+	if len(rows) == 0 {
+		return 0, 0, nil
 	}
 
 	if err := s.ch.Insert(ctx, tableWithCols, rows); err != nil {
 		return 0, 0, err
 	}
+	// ReplacingMergeTree handles idempotency; dedupe is CH-internal -> unknown here
 	return len(rows), 0, nil
 }
-
-// LookupIDs resolves (event_id, source, ordinal) -> (id, lang_code) from CH
-func (s *hybridStore) LookupIDs(ctx context.Context, keys []domain.UKey) (map[domain.UKey]domain.LookupRow, error) {
-	out := make(map[domain.UKey]domain.LookupRow, len(keys))
-	if len(keys) == 0 {
-		return out, nil
-	}
-
-	var sb strings.Builder
-	sb.WriteString(`
-	  SELECT event_id, toString(source) AS source, ordinal, any(id) AS id, any(lang_code) AS lang_code
-	  FROM swearjar.utterances
-	  WHERE (event_id, toString(source), ordinal) IN (`)
-	for i, k := range keys {
-		if i > 0 {
-			sb.WriteString(",")
-		}
-		sb.WriteString(fmt.Sprintf("('%s','%s',%d)", esc(k.EventID), esc(coerceSource(k.Source)), k.Ordinal))
-	}
-	sb.WriteString(") GROUP BY event_id, source, ordinal")
-
-	rows, err := s.ch.Query(ctx, sb.String())
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var ev, src, id string
-		var ord32 int32
-		var lang *string
-		if err := rows.Scan(&ev, &src, &ord32, &id, &lang); err != nil {
-			return nil, err
-		}
-		out[domain.UKey{EventID: ev, Source: src, Ordinal: int(ord32)}] = domain.LookupRow{
-			ID: id, LangCode: lang,
-		}
-	}
-	return out, rows.Err()
-}
-
-func esc(s string) string {
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	s = strings.ReplaceAll(s, `'`, `\'`)
-	return s
-}
-
-// func escNullable(s *string) (string, bool) {
-// 	if s == nil {
-// 		return "", true
-// 	}
-// 	return esc(*s), false
-// }
 
 func zeroIfEmpty(v, fb string) string {
 	if v == "" {
@@ -228,8 +184,6 @@ func (s *hybridStore) PreseedHours(ctx context.Context, startUTC, endUTC time.Ti
 // NextHourToProcess atomically claims the next pending or errored hour in the given range
 // and marks it as running. Uses SELECT ... FOR UPDATE SKIP LOCKED to avoid conflicts
 func (s *hybridStore) NextHourToProcess(ctx context.Context, startUTC, endUTC time.Time) (time.Time, bool, error) {
-	// We pick the oldest hour in range that is pending or errored and not currently locked
-	// The UPDATE acquires row lock via the CTE reference with SKIP LOCKED semantics
 	const sql = `
 		WITH next AS (
 			SELECT hour_utc FROM ingest_hours
@@ -274,4 +228,38 @@ func (s *hybridStore) NextHourToProcessAny(ctx context.Context) (time.Time, bool
 		return time.Time{}, false, err
 	}
 	return hr.UTC(), true, nil
+}
+
+func contentStableBatchID(us []domain.Utterance, limit int) uint64 {
+	if len(us) == 0 {
+		return 0
+	}
+	ids := make([]string, 0, len(us))
+	for _, u := range us {
+		if id := strings.TrimSpace(u.UtteranceID); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		return 0
+	}
+	sort.Strings(ids)
+	if limit <= 0 || limit > len(ids) {
+		limit = len(ids)
+	}
+	ids = ids[:limit]
+
+	h := sha256.New()
+	for _, id := range ids {
+		_, _ = io.WriteString(h, id)
+		h.Write([]byte{0}) // delimiter
+	}
+	sum := h.Sum(nil) // 32 bytes
+
+	// fold 256 -> 64 bits (better than truncation)
+	var out uint64
+	for i := 0; i < 4; i++ {
+		out ^= binary.BigEndian.Uint64(sum[i*8 : (i+1)*8])
+	}
+	return out
 }
