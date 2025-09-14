@@ -333,6 +333,135 @@ func (c *CH) Query(ctx context.Context, sql string, args ...any) (Rows, error) {
 	return nil, last
 }
 
+// Exec runs a statement that doesn't return rows (DDL/DML like ALTER ... DELETE, INSERT ... SELECT).
+// Retries on transient EOF-ish errors, with tracing and slow-query logging
+func (c *CH) Exec(ctx context.Context, sql string, args ...any) error {
+	if c == nil || c.conn == nil {
+		return fmt.Errorf("ch: nil client")
+	}
+	var last error
+	for attempt := 1; attempt <= c.maxRetries; attempt++ {
+		start := time.Now()
+		err := c.conn.Exec(ctx, sql, args...)
+		elapsedUS := time.Since(start).Microseconds()
+		if c.tracer != nil {
+			c.tracer.OnQuery(ctx, QueryEvent{
+				SQL:       sql,
+				Args:      args,
+				ElapsedUS: elapsedUS,
+				Err:       err,
+				Slow:      c.slowUS > 0 && elapsedUS >= c.slowUS,
+				Op:        "exec",
+			})
+		}
+		if err == nil {
+			return nil
+		}
+		last = err
+		if !isEOFish(err) || attempt == c.maxRetries {
+			return err
+		}
+		time.Sleep(c.retryBase * time.Duration(attempt))
+	}
+	return last
+}
+
+// ScalarUInt64 executes a query expected to return exactly one row with a single UInt64 column
+func (c *CH) ScalarUInt64(ctx context.Context, sql string, args ...any) (uint64, error) {
+	if c == nil || c.conn == nil {
+		return 0, fmt.Errorf("ch: nil client")
+	}
+	var last error
+	for attempt := 1; attempt <= c.maxRetries; attempt++ {
+		start := time.Now()
+		rows, err := c.conn.Query(ctx, sql, args...)
+		elapsedUS := time.Since(start).Microseconds()
+		if c.tracer != nil {
+			c.tracer.OnQuery(ctx, QueryEvent{
+				SQL:       sql,
+				Args:      args,
+				ElapsedUS: elapsedUS,
+				Err:       err,
+				Slow:      c.slowUS > 0 && elapsedUS >= c.slowUS,
+				Op:        "query",
+			})
+		}
+		if err != nil {
+			last = err
+			if !isEOFish(err) || attempt == c.maxRetries {
+				return 0, err
+			}
+			time.Sleep(c.retryBase * time.Duration(attempt))
+			continue
+		}
+
+		defer rows.Close()
+		if !rows.Next() {
+			if e := rows.Err(); e != nil {
+				return 0, e
+			}
+			return 0, fmt.Errorf("ch: scalar query returned no rows")
+		}
+		var v uint64
+		if err := rows.Scan(&v); err != nil {
+			return 0, err
+		}
+		if e := rows.Err(); e != nil {
+			return 0, e
+		}
+		return v, nil
+	}
+	return 0, last
+}
+
+// ScalarInt64 executes a query expected to return exactly one row with a single Int64 column
+func (c *CH) ScalarInt64(ctx context.Context, sql string, args ...any) (int64, error) {
+	if c == nil || c.conn == nil {
+		return 0, fmt.Errorf("ch: nil client")
+	}
+	var last error
+	for attempt := 1; attempt <= c.maxRetries; attempt++ {
+		start := time.Now()
+		rows, err := c.conn.Query(ctx, sql, args...)
+		elapsedUS := time.Since(start).Microseconds()
+		if c.tracer != nil {
+			c.tracer.OnQuery(ctx, QueryEvent{
+				SQL:       sql,
+				Args:      args,
+				ElapsedUS: elapsedUS,
+				Err:       err,
+				Slow:      c.slowUS > 0 && elapsedUS >= c.slowUS,
+				Op:        "query",
+			})
+		}
+		if err != nil {
+			last = err
+			if !isEOFish(err) || attempt == c.maxRetries {
+				return 0, err
+			}
+			time.Sleep(c.retryBase * time.Duration(attempt))
+			continue
+		}
+
+		defer rows.Close()
+		if !rows.Next() {
+			if e := rows.Err(); e != nil {
+				return 0, e
+			}
+			return 0, fmt.Errorf("ch: scalar query returned no rows")
+		}
+		var v int64
+		if err := rows.Scan(&v); err != nil {
+			return 0, err
+		}
+		if e := rows.Err(); e != nil {
+			return 0, e
+		}
+		return v, nil
+	}
+	return 0, last
+}
+
 // Close closes the connection
 func (c *CH) Close() error {
 	if c == nil || c.conn == nil {

@@ -60,6 +60,9 @@ type TxRunner interface {
 type Clickhouse interface {
 	Insert(ctx context.Context, table string, data any) error
 	Query(ctx context.Context, sql string, args ...any) (Rows, error)
+	Exec(ctx context.Context, sql string, args ...any) error
+	ScalarUInt64(ctx context.Context, sql string, args ...any) (uint64, error)
+	ScalarInt64(ctx context.Context, sql string, args ...any) (int64, error)
 	Close() error
 }
 

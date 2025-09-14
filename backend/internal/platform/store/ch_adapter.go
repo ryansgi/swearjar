@@ -36,6 +36,18 @@ func (a *clickhouseAdapter) Query(ctx context.Context, sql string, args ...any) 
 	return &rowsAdapter{r: r}, nil
 }
 
+func (a *clickhouseAdapter) Exec(ctx context.Context, sql string, args ...any) error {
+	return a.inner.Exec(ctx, sql, args...)
+}
+
+func (a *clickhouseAdapter) ScalarUInt64(ctx context.Context, sql string, args ...any) (uint64, error) {
+	return a.inner.ScalarUInt64(ctx, sql, args...)
+}
+
+func (a *clickhouseAdapter) ScalarInt64(ctx context.Context, sql string, args ...any) (int64, error) {
+	return a.inner.ScalarInt64(ctx, sql, args...)
+}
+
 func (a *clickhouseAdapter) Close() error { return a.inner.Close() }
 
 // rowsAdapter wraps ch.Rows as store.Rows
