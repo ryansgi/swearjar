@@ -16,7 +16,7 @@ type Options struct {
 	ReadTimeout   time.Duration
 	MaxRangeHours int
 	EnableLeases  bool
-
+	LeaseTTL      time.Duration
 	// Detect integration
 	DetectEnabled bool
 	DetectVersion int
@@ -35,6 +35,7 @@ func FromConfig(cfg config.Conf) Options {
 		ReadTimeout:   bf.MayDuration("READ_TIMEOUT", 10*time.Minute),
 		MaxRangeHours: bf.MayInt("MAX_RANGE_HOURS", 0),
 		EnableLeases:  bf.MayBool("LEASES", true),
+		LeaseTTL:      bf.MayDuration("LEASE_TTL", 3*time.Minute),
 		DetectEnabled: bf.MayBool("DETECT", false),
 		DetectVersion: bf.MayInt("DET_VERSION", 1),
 		DetectDryRun:  bf.MayBool("DET_DRY_RUN", false),

@@ -45,3 +45,20 @@ type Utterance struct {
 	TextRaw, TextNormalized string
 	LangCode                *string
 }
+
+// BackfillStatus represents the status of an ingest hour
+type BackfillStatus string
+
+const (
+	// BackfillPending is the initial state
+	BackfillPending BackfillStatus = "pending"
+
+	// BackfillRunning is the running state
+	BackfillRunning BackfillStatus = "running"
+
+	// BackfillOK is the ok state
+	BackfillOK BackfillStatus = "ok"
+
+	// BackfillError is the error state
+	BackfillError BackfillStatus = "error"
+)

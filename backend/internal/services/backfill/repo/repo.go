@@ -37,32 +37,32 @@ type hybridStore struct {
 
 func (s *hybridStore) StartHour(ctx context.Context, hour time.Time) error {
 	_, err := s.pg.Exec(ctx, `
-		INSERT INTO ingest_hours (hour_utc, started_at, status)
-		VALUES ($1, now(), 'running')
-		ON CONFLICT (hour_utc) DO UPDATE
-		SET started_at = now(), status = 'running', error = null, finished_at = null
-	`, hour.UTC())
+        INSERT INTO ingest_hours (hour_utc, started_at, bf_status)
+        VALUES ($1, now(), 'running')
+        ON CONFLICT (hour_utc) DO UPDATE
+        SET started_at = now(), bf_status = 'running', error = NULL, finished_at = NULL
+    `, hour.UTC())
 	return err
 }
 
 func (s *hybridStore) FinishHour(ctx context.Context, hour time.Time, fin domain.HourFinish) error {
 	_, err := s.pg.Exec(ctx, `
-		UPDATE ingest_hours SET
-			finished_at = now(),
-			status = $2,
-			cache_hit = $3,
-			bytes_uncompressed = $4,
-			events_scanned = $5,
-			utterances_extracted = $6,
-			inserted = $7,
-			deduped = $8,
-			fetch_ms = $9,
-			read_ms = $10,
-			db_ms = $11,
-			elapsed_ms = $12,
-			error = NULLIF($13,'')
-		WHERE hour_utc = $1
-	`,
+        UPDATE ingest_hours SET
+            finished_at          = now(),
+            bf_status            = $2,
+            cache_hit            = $3,
+            bytes_uncompressed   = $4,
+            events_scanned       = $5,
+            utterances_extracted = $6,
+            inserted             = $7,
+            deduped              = $8,
+            fetch_ms             = $9,
+            read_ms              = $10,
+            db_ms                = $11,
+            elapsed_ms           = $12,
+            error                = NULLIF($13,'')
+        WHERE hour_utc = $1
+    `,
 		hour.UTC(), fin.Status, fin.CacheHit, fin.BytesUncompressed, fin.Events, fin.Utterances,
 		fin.Inserted, fin.Deduped, fin.FetchMS, fin.ReadMS, fin.DBMS, fin.ElapsedMS, fin.ErrText,
 	)
@@ -127,7 +127,7 @@ func (s *hybridStore) InsertUtterances(ctx context.Context, us []domain.Utteranc
 			u.TextRaw,                             // text_raw
 			norm,                                  // text_normalized (Nullable(String))
 			ingestBatchID,                         // ingest_batch_id
-			ingestBatchID,                         // looks like a mistake, but its for ReplacingMergeTree(ver)
+			1,                                     // looks like a mistake, but its for ReplacingMergeTree(ver)
 		}
 		rows = append(rows, row)
 	}
@@ -168,37 +168,35 @@ func coerceSource(s string) string {
 
 func (s *hybridStore) PreseedHours(ctx context.Context, startUTC, endUTC time.Time) (int, error) {
 	const sql = `
-		INSERT INTO ingest_hours (hour_utc, status)
-		SELECT h, 'pending'
-		FROM generate_series($1::timestamptz, $2::timestamptz, '1 hour') AS g(h)
-		ON CONFLICT (hour_utc) DO NOTHING
-	`
+        INSERT INTO ingest_hours (hour_utc, bf_status)
+        SELECT h, 'pending'
+        FROM generate_series($1::timestamptz, $2::timestamptz, '1 hour') AS g(h)
+        ON CONFLICT (hour_utc) DO NOTHING
+    `
 	res, err := s.pg.Exec(ctx, sql, startUTC.UTC(), endUTC.UTC())
 	if err != nil {
 		return 0, err
 	}
-	n := res.RowsAffected()
-	return int(n), nil
+	return int(res.RowsAffected()), nil
 }
 
 // NextHourToProcess atomically claims the next pending or errored hour in the given range
 // and marks it as running. Uses SELECT ... FOR UPDATE SKIP LOCKED to avoid conflicts
 func (s *hybridStore) NextHourToProcess(ctx context.Context, startUTC, endUTC time.Time) (time.Time, bool, error) {
 	const sql = `
-		WITH next AS (
-			SELECT hour_utc FROM ingest_hours
-			WHERE hour_utc BETWEEN $1 AND $2 AND status IN ('pending','error')
-			ORDER BY hour_utc LIMIT 1 FOR UPDATE SKIP LOCKED
-		)
-		UPDATE ingest_hours ih
-		SET status = 'running', started_at = now(), error = NULL, finished_at = NULL
-		FROM next WHERE ih.hour_utc = next.hour_utc
-		RETURNING ih.hour_utc
-	`
+        WITH next AS (
+            SELECT hour_utc FROM ingest_hours
+            WHERE hour_utc BETWEEN $1 AND $2 AND bf_status IN ('pending','error')
+            ORDER BY hour_utc LIMIT 1 FOR UPDATE SKIP LOCKED
+        )
+        UPDATE ingest_hours ih
+        SET bf_status = 'running', started_at = now(), error = NULL, finished_at = NULL
+        FROM next WHERE ih.hour_utc = next.hour_utc
+        RETURNING ih.hour_utc
+    `
 	row := s.pg.QueryRow(ctx, sql, startUTC.UTC(), endUTC.UTC())
 	var hr time.Time
 	if err := row.Scan(&hr); err != nil {
-		// No rows -> no work left
 		if strings.Contains(err.Error(), "no rows") {
 			return time.Time{}, false, nil
 		}
@@ -209,16 +207,19 @@ func (s *hybridStore) NextHourToProcess(ctx context.Context, startUTC, endUTC ti
 
 func (s *hybridStore) NextHourToProcessAny(ctx context.Context) (time.Time, bool, error) {
 	const sql = `
-		WITH next AS (
-			SELECT hour_utc FROM ingest_hours WHERE status IN ('pending','error')
-			ORDER BY hour_utc LIMIT 1
-			FOR UPDATE SKIP LOCKED
-		)
-		UPDATE ingest_hours ih
-		SET status = 'running', started_at = now(), error = NULL, finished_at = NULL
-		FROM next WHERE ih.hour_utc = next.hour_utc
-		RETURNING ih.hour_utc
-	`
+        WITH next AS (
+            SELECT hour_utc
+            FROM ingest_hours
+            WHERE bf_status IN ('pending','error')
+            ORDER BY hour_utc
+            LIMIT 1
+            FOR UPDATE SKIP LOCKED
+        )
+        UPDATE ingest_hours ih
+        SET bf_status = 'running', started_at = now(), error = NULL, finished_at = NULL
+        FROM next WHERE ih.hour_utc = next.hour_utc
+        RETURNING ih.hour_utc
+    `
 	row := s.pg.QueryRow(ctx, sql)
 	var hr time.Time
 	if err := row.Scan(&hr); err != nil {

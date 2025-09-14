@@ -2,9 +2,12 @@
 package module
 
 import (
+	"context"
+	"time"
+
 	"swearjar/internal/modkit"
 	"swearjar/internal/modkit/httpkit"
-	modreg "swearjar/internal/modkit/module" // registry (Register/PortsAs/Reset)
+	modreg "swearjar/internal/modkit/module"
 	"swearjar/internal/modkit/repokit"
 
 	"swearjar/internal/core/normalize"
@@ -14,9 +17,11 @@ import (
 	"swearjar/internal/services/backfill/repo"
 	"swearjar/internal/services/backfill/service"
 
+	detectdom "swearjar/internal/services/detect/domain"
 	detectmod "swearjar/internal/services/detect/module"
 	identRepoBinder "swearjar/internal/services/ident/repo"
 	identservice "swearjar/internal/services/ident/service"
+	nightshiftmod "swearjar/internal/services/nightshift/module"
 )
 
 // Ports defines the backfill module ports
@@ -34,21 +39,39 @@ type Module struct {
 // It wires adapters and the service using config from deps.Cfg.
 // If detection is enabled (CORE_BACKFILL_DETECT or config), it looks up the
 // already-registered detect module from the global registry and assigns its
-// Writer port to svc.Detect
+// Writer port to svc.DetectorPort.
+// If nightshift is enabled (CORE_BACKFILL_NIGHTSHIFT or config), it looks up the
+// already-registered nightshift module from the global registry and assigns its
+// Runner port to svc.NightshiftHour
 func New(deps modkit.Deps) *Module {
 	opts := FromConfig(deps.Cfg)
 
 	storeBinder := repo.NewHybrid(deps.CH)
 
 	// Non-DB adapters
-	fetch := ingest.NewFetcher(deps)    // uses CORE_INGEST_* from deps.Cfg
-	reader := ingest.NewReaderFactory() // wraps GHArchive reader
-	extract := ingest.NewExtractor()    // wraps FromEvent
+	fetch := ingest.NewFetcher(deps)
+	reader := ingest.NewReaderFactory()
+	extract := ingest.NewExtractor()
 	norm := ingest.NewNormalizer(normalize.New())
+	leaseFn := guardrails.MakeAdvisoryLease(deps, "backfill", opts.LeaseTTL)
 
-	leaseFn := guardrails.MakeAdvisoryLease(deps)
+	var detWriter detectdom.WriterPort
+	if opts.DetectEnabled {
+		if dp, ok := modreg.PortsAs[detectmod.Ports]("detect"); ok && dp.Writer != nil {
+			detWriter = dp.Writer
+		}
+	}
 
-	// Construct the backfill service
+	var nightshiftFn func(context.Context, time.Time) error
+	if np, ok := modreg.PortsAs[nightshiftmod.Ports]("nightshift"); ok && np.Runner != nil {
+		if r, ok := any(np.Runner).(interface {
+			ApplyHour(context.Context, time.Time) error
+		}); ok {
+			nightshiftFn = r.ApplyHour
+		}
+	}
+
+	// Construct service and chain optional hooks
 	svc := service.New(
 		repokit.TxRunner(deps.PG),
 		storeBinder,
@@ -65,22 +88,14 @@ func New(deps modkit.Deps) *Module {
 			ReadTimeout:   opts.ReadTimeout,
 			MaxRangeHours: opts.MaxRangeHours,
 			EnableLeases:  opts.EnableLeases,
-			InsertChunk:   0, // keep default
+			InsertChunk:   0,
 			DetectEnabled: opts.DetectEnabled,
 		},
 		leaseFn,
-		nil, // detect writer (optional); set below when enabled and available
+		detWriter,
 	).WithIdentService(
 		identservice.New(repokit.TxRunner(deps.PG), identRepoBinder.NewPG()),
-	)
-
-	// If detect is enabled, resolve detect module's Writer from the registry.
-	// main.go registers detect before backfill when --detect is used
-	if opts.DetectEnabled {
-		if dp, ok := modreg.PortsAs[detectmod.Ports]("detect"); ok && dp.Writer != nil {
-			svc.Detect = dp.Writer
-		}
-	}
+	).WithNightshift(nightshiftFn)
 
 	m := &Module{deps: deps}
 	m.ports = Ports{Runner: svc}

@@ -74,12 +74,10 @@ type Service struct {
 	principalsSem chan struct{}
 
 	identPort identdom.Ports
-}
 
-// WithIdentService wires an ident service port for use in lookups
-func (s *Service) WithIdentService(p identdom.Ports) *Service {
-	s.identPort = p
-	return s
+	// Nightshift, when non-nil, is called after a successful hour ingest/detect.
+	// It should be idempotent and safe to call multiple times for the same hour
+	Nightshift func(ctx context.Context, hour time.Time) error
 }
 
 // New constructs the backfill service
@@ -113,6 +111,18 @@ func New(
 		Lease:         lease,
 		principalsSem: make(chan struct{}, ps),
 	}
+}
+
+// WithIdentService wires an ident service port for use in lookups
+func (s *Service) WithIdentService(p identdom.Ports) *Service {
+	s.identPort = p
+	return s
+}
+
+// WithNightshift sets an optional callback to run after each successful hour
+func (s *Service) WithNightshift(fn func(context.Context, time.Time) error) *Service {
+	s.Nightshift = fn
+	return s
 }
 
 // PlanRange seeds ingest_hours without processing
@@ -533,6 +543,15 @@ func (s *Service) runHourUnlocked(ctx context.Context, hr domain.HourRef) (retEr
 				}
 			}
 		}
+	}
+
+	if s.Nightshift != nil {
+		logger.C(hrCtx).Debug().Time("hour", hourUTC).Msg("backfill: running nightshift")
+		if err := s.Nightshift(hrCtx, hourUTC); err != nil {
+			logger.C(hrCtx).Warn().Time("hour", hourUTC).Err(err).Msg("backfill: nightshift apply failed")
+		}
+	} else {
+		logger.C(hrCtx).Debug().Time("hour", hourUTC).Msg("backfill: no nightshift configured")
 	}
 
 	return nil
