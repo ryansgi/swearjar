@@ -4,10 +4,6 @@ docker exec -it sw_api bash -c 'GOEXPERIMENT=jsonv2 go run ./cmd/swearjar-backfi
 
 docker exec -it sw_api bash -c 'GOEXPERIMENT=jsonv2 go run ./cmd/swearjar-detect -start 2025-08-01T00 -end 2025-08-01T02'
 
-docker exec -it sw_api bash -c 'rm /var/lib/swearjar/gharchive/\*'
-
-docker exec -it sw_api bash -c 'ls /var/lib/swearjar/gharchive'
-
 docker exec -it sw_api bash -c 'GOEXPERIMENT=jsonv2 go run ./cmd/swearjar-hallmonitor -mode backfill --since 2025-08-01T00 --until 2025-09-01T00 --limit 0'
 
 docker exec -it sw_api bash -c 'GOEXPERIMENT=jsonv2 go run ./cmd/swearjar-hallmonitor --since 2025-08-01T00 --until 2025-09-01T00 --limit 0'
@@ -29,7 +25,11 @@ Backfill resume)
 # Around when data started breaking) `2012-03-10-00` to `2012-04-04-12-00`
 
 - docker exec -it sw_api bash -c 'GOEXPERIMENT=jsonv2 go run ./cmd/swearjar-backfill -start 2012-03-10T00 -end 2025-09-11T00'
-docker exec -it sw_api bash -c 'GOEXPERIMENT=jsonv2 go run ./cmd/swearjar-detect -start 2012-03-10T00 -end 2025-09-11T00'
+- docker exec -it sw_api bash -c 'GOEXPERIMENT=jsonv2 go run ./cmd/swearjar-detect -start 2012-03-10T00 -end 2025-09-11T00'
+
+Nightshift implementation)
+
+- docker exec -it sw_api bash -c 'GOEXPERIMENT=jsonv2 go run ./cmd/swearjar-backfill -start 2025-08-01T00 -end 2025-08-01T00 --detect --detver 1 --nightshift --ns-detver 1 --ns-retention aggressive --ns-workers 2 --ns-leases'
 
 # Starting to validate the concept... Win
 

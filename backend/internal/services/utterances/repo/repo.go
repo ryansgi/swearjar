@@ -28,7 +28,6 @@ func (r *CH) List(ctx context.Context, in dom.ListInput, limit int) ([]dom.Row, 
 			source,
 			source_detail,
 			lang_code,
-			lang_script,
 			coalesce(text_normalized, '') AS text_norm
 		FROM swearjar.utterances
 		WHERE created_at >= ? AND created_at < ?
@@ -72,7 +71,7 @@ func (r *CH) List(ctx context.Context, in dom.ListInput, limit int) ([]dom.Row, 
 			&it.RepoHID,
 			&it.ActorHID,
 			&it.Source, &it.SourceDetail,
-			&it.LangCode, &it.Script, &it.TextNorm,
+			&it.LangCode, &it.TextNorm,
 		); err != nil {
 			return nil, dom.AfterKey{}, err
 		}

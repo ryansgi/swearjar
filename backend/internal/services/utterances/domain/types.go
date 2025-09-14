@@ -34,6 +34,5 @@ type Row struct {
 	Source       string // source_enum
 	SourceDetail string
 	LangCode     *string
-	Script       *string
 	TextNorm     string // normalized; service guarantees non-empty when text exists
 }
