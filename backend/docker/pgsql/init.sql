@@ -22,6 +22,8 @@ CREATE TYPE consent_action_enum AS ENUM ('opt_in','opt_out');
 CREATE TYPE consent_state_enum  AS ENUM ('pending','active','revoked','expired');
 CREATE TYPE consent_scope_enum  AS ENUM ('demask_repo','demask_self');
 CREATE TYPE evidence_kind_enum  AS ENUM ('repo_file','actor_gist');
+CREATE TYPE backfill_status     AS ENUM ('pending','running','ok','error');
+CREATE TYPE nightshift_status   AS ENUM ('pending','running','retention_applied','done','error');
 
 -- =========
 -- Domains
@@ -203,13 +205,15 @@ CREATE VIEW active_allow_actors AS
    WHERE r.principal='actor' AND r.action='opt_in' AND r.state='active';
 
 -- =========
--- Ingest accounting + leases
+-- Ingest accounting
 -- =========
 CREATE TABLE ingest_hours (
   hour_utc               timestamptz PRIMARY KEY,
+
+  -- Backfill lifecycle + metrics
   started_at             timestamptz NOT NULL DEFAULT now(),
   finished_at            timestamptz,
-  status                 text NOT NULL DEFAULT 'running',
+  bf_status              backfill_status NOT NULL DEFAULT 'pending',
   cache_hit              boolean,
   bytes_uncompressed     bigint,
   events_scanned         int,
@@ -223,17 +227,59 @@ CREATE TABLE ingest_hours (
   error                  text,
   dropped_due_to_optouts int,
   policy_reverify_count  int,
-  policy_reverify_ms     int
+  policy_reverify_ms     int,
+
+  -- Backfill lease (cooperative claim with auto-reclaim)
+  bf_lease_claimed_at    timestamptz,
+  bf_lease_owner         text,
+  bf_lease_expires_at    timestamptz,
+
+  -- Nightshift lifecycle
+  ns_status              nightshift_status NOT NULL DEFAULT 'pending',
+  ns_started_at          timestamptz,
+  ns_finished_at         timestamptz,
+  ns_detver              int,
+  ns_hits_archived       int,
+  ns_deleted_raw         int,
+  ns_spared_raw          int,
+  ns_archive_ms          int,
+  ns_prune_ms            int,
+  ns_total_ms            int,
+  ns_error               text,
+
+  -- Nightshift lease (cooperative claim with auto-reclaim)
+  ns_lease_claimed_at    timestamptz,
+  ns_lease_owner         text,
+  ns_lease_expires_at    timestamptz,
+
+  -- Lease shape invariants
+  CONSTRAINT ck_bf_lease_pair     CHECK ((bf_lease_claimed_at IS NULL) = (bf_lease_owner IS NULL)),
+  CONSTRAINT ck_bf_lease_exp_pair CHECK ((bf_lease_expires_at IS NULL) = (bf_lease_claimed_at IS NULL)),
+  CONSTRAINT ck_ns_lease_pair     CHECK ((ns_lease_claimed_at IS NULL) = (ns_lease_owner IS NULL)),
+  CONSTRAINT ck_ns_lease_exp_pair CHECK ((ns_lease_expires_at IS NULL) = (ns_lease_claimed_at IS NULL))
 );
-CREATE INDEX ix_ingest_hours_status ON ingest_hours(status) WHERE finished_at IS NULL;
+
+-- Rows still running and not finished (useful for dashboards)
+CREATE INDEX ix_ingest_hours_running ON ingest_hours (hour_utc) WHERE finished_at IS NULL;
+
+-- Backfill: ready to claim (no lease yet) among work-incomplete statuses
+CREATE INDEX ix_ingest_hours_bf_ready ON ingest_hours (hour_utc) WHERE bf_status IN ('pending','error') AND bf_lease_claimed_at IS NULL;
+
+-- Backfill: fast lookup of lease expiry (for reclaim scans: WHERE bf_lease_expires_at <= now())
+CREATE INDEX ix_ingest_hours_bf_lease_exp ON ingest_hours (bf_lease_expires_at);
+
+-- Nightshift: ready to claim after successful ingest (no lease yet)
+CREATE INDEX ix_ingest_hours_ns_ready ON ingest_hours (hour_utc) WHERE bf_status = 'ok' AND ns_status IN ('pending','error') AND ns_lease_claimed_at IS NULL;
+
+-- Nightshift: fast lookup of lease expiry (for reclaim scans: WHERE ns_lease_expires_at <= now())
+CREATE INDEX ix_ingest_hours_ns_lease_exp ON ingest_hours (ns_lease_expires_at);
+
+-- status progress monitors
+CREATE INDEX ix_ingest_hours_bf_status ON ingest_hours (bf_status);
+CREATE INDEX ix_ingest_hours_ns_status ON ingest_hours (ns_status);
 
 INSERT INTO rulepacks (version, description, checksum_sha256) VALUES
 (1, 'seed: embedded rules.json v1', '\x644080b9f56902cb95ce7f58dc6115d33819db135dbffbd1cc0f36f7bbcdcdc7');
-
-CREATE TABLE ingest_hours_leases (
-  hour_utc   timestamptz PRIMARY KEY,
-  claimed_at timestamptz NOT NULL DEFAULT now()
-);
 
 -- =========
 -- Hallmonitor queues (HID keyed)
