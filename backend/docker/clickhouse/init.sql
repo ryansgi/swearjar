@@ -10,7 +10,7 @@ USE swearjar;
 SET allow_experimental_nlp_functions = 1;
 
 -- UTTERANCES (facts)
-CREATE TABLE IF NOT EXISTS utterances
+CREATE TABLE utterances
 (
   -- identity & routing (IDs supplied by app; prefer deterministic for idempotency)
   id UUID,  -- REQUIRED: supplied by app (no DEFAULT)
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS utterances
   -- github's event_id removed: we no longer couple facts to GH/Event IDs
   -- this was done to prevent leaking PII accidentally
 
-  event_type String,
+  event_type         String,
   repo_hid           FixedString(32), -- 32-byte HIDs as raw bytes
   actor_hid          FixedString(32), -- 32-byte HIDs as raw bytes
   hid_key_version    Int16,
@@ -41,9 +41,6 @@ CREATE TABLE IF NOT EXISTS utterances
   lang_reliable      UInt8
       DEFAULT ifNull(lang_confidence, 0) >= 60,
 
-  -- script not available from CH NLP; kept for parity/ingest-side fills
-  lang_script        Nullable(String),
-
   -- RU-only sentiment; NULL otherwise
   sentiment_score    Nullable(Float32)
       DEFAULT if(lang_code = 'ru', detectTonality(text_raw), NULL),
@@ -59,13 +56,13 @@ ENGINE = ReplacingMergeTree(ver)
   SETTINGS index_granularity = 8192;
 
 -- Text skipping index (token-based). Note: column is Nullable(String), so index an expression.
-CREATE INDEX IF NOT EXISTS utt_text_tokenbf ON utterances (coalesce(text_normalized, '')) TYPE tokenbf_v1(1024, 2, 0) GRANULARITY 64;
+CREATE INDEX utt_text_tokenbf ON utterances (coalesce(text_normalized, '')) TYPE tokenbf_v1(1024, 2, 0) GRANULARITY 64;
 
 -- If you need aggressive substring search, consider ngrambf_v1 instead (pick one style)
 -- CREATE INDEX utt_text_ngrambf ON utterances (coalesce(text_normalized, '')) TYPE ngrambf_v1(3, 2048, 2, 0) GRANULARITY 64;
 
 -- HITS (facts)
-CREATE TABLE IF NOT EXISTS hits
+CREATE TABLE hits
 (
   id                 UUID,   -- REQUIRED: supplied by app (no DEFAULT)
   utterance_id       UUID,   -- must match utterances.id
@@ -87,57 +84,225 @@ CREATE TABLE IF NOT EXISTS hits
 )
 ENGINE = ReplacingMergeTree(ver)
   PARTITION BY toYYYYMM(created_at)
-  -- Include id at the tail to make dedupe deterministic
   ORDER BY (repo_hid, created_at, actor_hid, term, utterance_id, id)
   SETTINGS index_granularity = 8192;
 
 -- Fast WHERE term IN (...) / term='...'
-CREATE INDEX IF NOT EXISTS hit_term_tokenbf
-  ON hits (term)
-  TYPE tokenbf_v1(1024, 2, 0) GRANULARITY 64;
+CREATE INDEX IF NOT EXISTS hit_term_tokenbf ON hits (term) TYPE tokenbf_v1(1024, 2, 0) GRANULARITY 64;
 
--- Helper: utterances with hits (used by pruning jobs)
--- We keep an AggregatingMergeTree of partial aggregates via a materialized view,
--- and expose a convenience view that finalizes on read.
-CREATE TABLE IF NOT EXISTS utterances_with_hits
+-- ==========================================
+-- Nightshift
+-- Append-only analytic archives (no time to live)
+-- ==========================================
+
+CREATE TABLE term_dict
 (
-  utterance_id  UUID,
-  first_hit_at  AggregateFunction(min, DateTime64(3, 'UTC')),
-  hits_count    AggregateFunction(sum, UInt64)
+  term_id    UInt64, -- cityHash64(lower(term)) or curated ID
+  term       String,
+  updated_at DateTime DEFAULT now()
 )
-ENGINE = AggregatingMergeTree
-ORDER BY utterance_id;
+ENGINE = MergeTree
+  PARTITION BY tuple()
+  ORDER BY term_id
+  SETTINGS index_granularity = 8192;
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS mv_utterances_with_hits
-TO utterances_with_hits
-AS
-SELECT
-  utterance_id,
-  minState(created_at)         AS first_hit_at,
-  sumState(toUInt64(1))        AS hits_count
-FROM hits
-GROUP BY utterance_id;
-
--- Convenience view that presents finalized aggregates
-CREATE VIEW IF NOT EXISTS utterances_with_hits_final AS
-SELECT
-  utterance_id,
-  minMerge(first_hit_at) AS first_hit_at,
-  sumMerge(hits_count)   AS hits_count
-FROM utterances_with_hits
-GROUP BY utterance_id;
-
--- Historical tracked hourly table (for pruning resilience)
--- Not foreign keyed; keeps coarse history even when utterances are pruned.
-CREATE TABLE IF NOT EXISTS events_tracked_hourly
+CREATE TABLE commit_crimes
 (
-  hour_utc     DateTime64(0, 'UTC'),
-  repo_hid     FixedString(32),
-  actor_hid    FixedString(32),
-  source       Enum8('commit' = 1, 'issue' = 2, 'pr' = 3, 'comment' = 4),
-  events       UInt64,
-  utterances   UInt64,
-  hits         UInt64
+  -- time & versions
+  created_at     DateTime64(3, 'UTC'),
+  bucket_hour    DateTime, -- toStartOfHour(created_at)
+  detver         Int32, -- hits.detector_version
+
+  -- ids
+  hit_id         UUID, -- hits.id
+  utterance_id   UUID, -- hits.utterance_id
+  repo_hid       FixedString(32),
+  actor_hid      FixedString(32),
+
+  -- source context
+  source         Enum8('commit' = 1, 'issue' = 2, 'pr' = 3, 'comment' = 4),
+  source_detail  String,
+
+  -- language/context copied from utterances
+  lang_code        Nullable(String),
+  lang_confidence  Nullable(Int16),
+  lang_reliable    UInt8,
+  sentiment_score  Nullable(Float32),
+  text_len         UInt32, -- length(text_raw)
+
+  -- taxonomy
+  term_id        UInt64,
+  term           String, -- normalized term
+  category       Enum8('bot_rage' = 1, 'tooling_rage' = 2, 'self_own' = 3, 'generic' = 4),
+  severity       Enum8('mild' = 1, 'strong' = 2, 'slur_masked' = 3),
+  target         LowCardinality(Nullable(String)),
+
+  -- span info (for samples/drilldowns)
+  span_start     Int32,
+  span_end       Int32
 )
-ENGINE = ReplacingMergeTree
-ORDER BY (hour_utc, repo_hid, actor_hid, source);
+ENGINE = MergeTree PARTITION BY toYYYYMM(created_at) ORDER BY (bucket_hour, repo_hid, actor_hid, term_id, detver, utterance_id, hit_id) SETTINGS index_granularity = 8192;
+
+-- Optional: quick WHERE term='foo' / IN (...)
+CREATE INDEX cc_term_tokenbf ON commit_crimes (term) TYPE tokenbf_v1(1024, 2, 0) GRANULARITY 64;
+
+CREATE VIEW v_cc_timeseries_daily AS
+SELECT toDate(created_at) AS day, detver, count() AS hits, uniqCombined(12)(utterance_id) AS utterances
+FROM commit_crimes
+GROUP BY day, detver
+ORDER BY day ASC, detver ASC;
+
+CREATE VIEW v_cc_timeseries_hourly AS
+SELECT toStartOfHour(created_at) AS hour, detver, count() AS hits, uniqCombined(12)(utterance_id) AS utterances
+FROM commit_crimes
+GROUP BY hour, detver
+ORDER BY hour ASC, detver ASC;
+
+CREATE VIEW v_cc_hits_by_detver_daily AS
+SELECT toDate(created_at) AS day, detver, count() AS hits
+FROM commit_crimes
+GROUP BY day, detver
+ORDER BY day ASC, detver ASC;
+
+CREATE VIEW v_cc_heatmap_weekly AS
+SELECT toDayOfWeek(created_at) - 1 AS dow, toHour(created_at) AS hod, count() AS hits, uniqCombined(12)(utterance_id) AS utterances
+FROM commit_crimes
+GROUP BY dow, hod
+ORDER BY dow ASC, hod ASC;
+
+CREATE VIEW v_cc_lang_breakdown AS
+SELECT coalesce(lang_code, '') AS lang_code, count() AS hits, uniqCombined(12)(utterance_id) AS utterances
+FROM commit_crimes
+GROUP BY lang_code
+ORDER BY hits DESC;
+
+-- Category x severity
+CREATE VIEW v_cc_category_severity AS
+SELECT cast(category AS Nullable(String)) AS category, cast(severity AS Nullable(String)) AS severity, count() AS hits, uniqCombined(12)(utterance_id) AS utterances
+FROM commit_crimes
+GROUP BY category, severity
+ORDER BY hits DESC;
+
+-- Top terms per hour (ranked in-view via window function; keep all detvers/langs)
+CREATE VIEW v_cc_top_terms_hour AS
+WITH base AS (
+  SELECT
+    toStartOfHour(created_at) AS bucket_hour,
+    detver,
+    lang_code AS nl_lang,
+    term_id,
+    anyHeavy(term) AS term,
+    count() AS hits
+  FROM commit_crimes
+  GROUP BY bucket_hour, detver, nl_lang, term_id
+),
+ranked AS (
+  SELECT
+    *,
+    row_number() OVER (PARTITION BY bucket_hour, detver ORDER BY hits DESC, term_id ASC) AS rn
+  FROM base
+)
+SELECT * FROM ranked WHERE rn <= 20 ORDER BY bucket_hour ASC, detver ASC, hits DESC;
+
+CREATE VIEW v_cc_repo_day AS
+SELECT
+  toDate(created_at) AS day,
+  repo_hid,
+  detver,
+  cast(category AS Nullable(String)) AS category,
+  cast(severity AS Nullable(String)) AS severity,
+  count() AS hits,
+  uniqCombined(12)(utterance_id) AS utterances
+FROM commit_crimes
+GROUP BY day, repo_hid, detver, category, severity
+ORDER BY day ASC, repo_hid ASC, detver ASC, hits DESC;
+
+-- Samples: latest N per (term_id, repo_hid) keeps drilldowns simple
+-- (filter with WHERE before selecting from this view to keep it small)
+CREATE VIEW v_cc_samples_latest AS
+SELECT * FROM
+(
+  SELECT
+    c.*,
+    row_number() OVER (
+      PARTITION BY term_id, repo_hid
+      ORDER BY created_at DESC, hit_id ASC
+    ) AS rn
+  FROM commit_crimes AS c
+)
+WHERE rn <= 50;
+
+CREATE VIEW v_cc_actor_timeseries_daily AS
+SELECT toDate(created_at) AS day, actor_hid, detver, count() AS hits, uniqCombined(12)(utterance_id) AS utterances
+FROM commit_crimes
+GROUP BY day, actor_hid, detver
+ORDER BY day ASC, actor_hid ASC, detver ASC;
+
+CREATE VIEW v_cc_actor_timeseries_hourly AS
+SELECT toStartOfHour(created_at) AS hour, actor_hid, detver, count() AS hits, uniqCombined(12)(utterance_id) AS utterances
+FROM commit_crimes
+GROUP BY hour, actor_hid, detver
+ORDER BY hour ASC, actor_hid ASC, detver ASC;
+
+CREATE VIEW v_cc_actor_day AS
+SELECT
+  toDate(created_at) AS day,
+  actor_hid,
+  detver,
+  cast(category AS Nullable(String)) AS category,
+  cast(severity AS Nullable(String)) AS severity,
+  count() AS hits,
+  uniqCombined(12)(utterance_id) AS utterances
+FROM commit_crimes
+GROUP BY day, actor_hid, detver, category, severity
+ORDER BY day ASC, actor_hid ASC, detver ASC, hits DESC;
+
+CREATE VIEW v_cc_actor_lang_breakdown AS
+SELECT actor_hid, coalesce(lang_code, '') AS lang_code, count() AS hits, uniqCombined(12)(utterance_id) AS utterances
+FROM commit_crimes
+GROUP BY actor_hid, lang_code
+ORDER BY actor_hid ASC, hits DESC;
+
+CREATE VIEW v_cc_actor_category_severity AS
+SELECT actor_hid, cast(category AS Nullable(String)) AS category, cast(severity AS Nullable(String)) AS severity, count() AS hits, uniqCombined(12)(utterance_id) AS utterances
+FROM commit_crimes
+GROUP BY actor_hid, category, severity
+ORDER BY actor_hid ASC, hits DESC;
+
+CREATE VIEW v_cc_actor_top_terms_daily AS
+WITH base AS (
+  SELECT
+    toDate(created_at) AS day,
+    actor_hid,
+    detver,
+    lang_code AS nl_lang,
+    term_id,
+    anyHeavy(term) AS term,
+    count() AS hits
+  FROM commit_crimes
+  GROUP BY day, actor_hid, detver, nl_lang, term_id
+),
+ranked AS (
+  SELECT
+    *,
+    row_number() OVER (PARTITION BY day, actor_hid, detver ORDER BY hits DESC, term_id ASC) AS rn
+  FROM base
+)
+SELECT *
+FROM ranked
+WHERE rn <= 20
+ORDER BY day ASC, actor_hid ASC, detver ASC, hits DESC;
+
+-- Actor leaderboard (hits & unique-utterance counts) over any filtered window
+CREATE VIEW v_cc_actor_leaderboard AS
+SELECT actor_hid, count() AS hits, uniqCombined(12)(utterance_id) AS utterances, min(created_at) AS first_seen_at, max(created_at) AS last_seen_at
+FROM commit_crimes
+GROUP BY actor_hid
+ORDER BY hits DESC, utterances DESC;
+
+-- Actor x repo cross-tab daily (helps see where an actor's events happen)
+CREATE VIEW v_cc_actor_repo_day AS
+SELECT toDate(created_at) AS day, actor_hid, repo_hid, detver, count() AS hits, uniqCombined(12)(utterance_id) AS utterances
+FROM commit_crimes
+GROUP BY day, actor_hid, repo_hid, detver
+ORDER BY day ASC, actor_hid ASC, hits DESC;
