@@ -1,4 +1,4 @@
--- Facts live in Clickhouse, we keep our control-plane in Postgres
+-- Facts in ClickHouse; control-plane in Postgres.
 
 CREATE DATABASE IF NOT EXISTS swearjar;
 USE swearjar;
@@ -68,16 +68,44 @@ CREATE TABLE hits
   utterance_id       UUID,   -- must match utterances.id
   created_at         DateTime64(3, 'UTC'),
   source             Enum8('commit' = 1, 'issue' = 2, 'pr' = 3, 'comment' = 4),
+
   repo_hid           FixedString(32),
   actor_hid          FixedString(32),
   lang_code          Nullable(String),
+
   term               String, -- normalized
-  category           Enum8('bot_rage' = 1, 'tooling_rage' = 2, 'self_own' = 3, 'generic' = 4),
+
+  category           Enum8(
+                        'bot_rage'     = 1,
+                        'tooling_rage' = 2,
+                        'self_own'     = 3,
+                        'generic'      = 4,
+                        'lang_rage'    = 5
+                      ),
+
   severity           Enum8('mild' = 1, 'strong' = 2, 'slur_masked' = 3),
+
+  -- context/category gating diagnostics + targeting (persisted from detector)
+  ctx_action         Enum8('none' = 0, 'upgraded' = 1, 'downgraded' = 2) DEFAULT 'none',
+  target_type        Enum8('none' = 0, 'bot' = 1, 'tool' = 2, 'lang' = 3, 'framework' = 4) DEFAULT 'none',
+  target_id          LowCardinality(String) DEFAULT '',    -- stable alias id from rulepack (e.g., "dependabot", "eslint", "javascript", "react")
+  target_name        Nullable(String),                    -- exact surface mention matched (e.g., "@dependabot")
+  target_span_start  Nullable(Int32),
+  target_span_end    Nullable(Int32),
+  target_distance    Nullable(Int32),                     -- bytes from hit center to target start
+
   span_start         Int32,
   span_end           Int32,
   CONSTRAINT ck_hits_span_valid CHECK span_start >= 0 AND span_end > span_start,
+
   detector_version   Int32,
+
+  -- detector internals we persist
+  detector_source    Enum8('template' = 1, 'lemma' = 2),
+  pre_context        String CODEC(ZSTD(12)),
+  post_context       String CODEC(ZSTD(12)),
+  zones              Array(String) CODEC(ZSTD(12)),
+
   -- ingest metadata / upsert aid (use a stable number per batch; replays can reuse it)
   ingest_batch_id    UInt64 DEFAULT 0,
   ver                UInt64 DEFAULT ingest_batch_id
@@ -88,7 +116,12 @@ ENGINE = ReplacingMergeTree(ver)
   SETTINGS index_granularity = 8192;
 
 -- Fast WHERE term IN (...) / term='...'
-CREATE INDEX IF NOT EXISTS hit_term_tokenbf ON hits (term) TYPE tokenbf_v1(1024, 2, 0) GRANULARITY 64;
+CREATE INDEX IF NOT EXISTS hit_term_tokenbf ON hits (term)
+  TYPE tokenbf_v1(1024, 2, 0) GRANULARITY 64;
+
+-- Fast WHERE target_id IN (...) / = '...'
+CREATE INDEX IF NOT EXISTS hit_target_tokenbf ON hits (target_id)
+  TYPE tokenbf_v1(1024, 2, 0) GRANULARITY 64;
 
 -- ==========================================
 -- Nightshift
@@ -110,12 +143,12 @@ CREATE TABLE commit_crimes
 (
   -- time & versions
   created_at     DateTime64(3, 'UTC'),
-  bucket_hour    DateTime, -- toStartOfHour(created_at)
-  detver         Int32, -- hits.detector_version
+  bucket_hour    DateTime,  -- toStartOfHour(created_at)
+  detver         Int32,     -- hits.detector_version
 
   -- ids
-  hit_id         UUID, -- hits.id
-  utterance_id   UUID, -- hits.utterance_id
+  hit_id         UUID,      -- hits.id
+  utterance_id   UUID,      -- hits.utterance_id
   repo_hid       FixedString(32),
   actor_hid      FixedString(32),
 
@@ -133,18 +166,45 @@ CREATE TABLE commit_crimes
   -- taxonomy
   term_id        UInt64,
   term           String, -- normalized term
-  category       Enum8('bot_rage' = 1, 'tooling_rage' = 2, 'self_own' = 3, 'generic' = 4),
+  category       Enum8(
+                    'bot_rage'     = 1,
+                    'tooling_rage' = 2,
+                    'self_own'     = 3,
+                    'generic'      = 4,
+                    'lang_rage'    = 5
+                  ),
   severity       Enum8('mild' = 1, 'strong' = 2, 'slur_masked' = 3),
-  target         LowCardinality(Nullable(String)),
+
+  -- structured targeting (kept in sync with hits)
+  ctx_action         Enum8('none' = 0, 'upgraded' = 1, 'downgraded' = 2) DEFAULT 'none',
+  target_type        Enum8('none' = 0, 'bot' = 1, 'tool' = 2, 'lang' = 3, 'framework' = 4) DEFAULT 'none',
+  target_id          LowCardinality(String) DEFAULT '',
+  target_name        Nullable(String),
+  target_span_start  Nullable(Int32),
+  target_span_end    Nullable(Int32),
+  target_distance    Nullable(Int32),
 
   -- span info (for samples/drilldowns)
   span_start     Int32,
-  span_end       Int32
-)
-ENGINE = MergeTree PARTITION BY toYYYYMM(created_at) ORDER BY (bucket_hour, repo_hid, actor_hid, term_id, detver, utterance_id, hit_id) SETTINGS index_granularity = 8192;
+  span_end       Int32,
 
--- Optional: quick WHERE term='foo' / IN (...)
-CREATE INDEX cc_term_tokenbf ON commit_crimes (term) TYPE tokenbf_v1(1024, 2, 0) GRANULARITY 64;
+  -- arry-through detector context
+  detector_source Enum8('template' = 1, 'lemma' = 2),
+  pre_context     String CODEC(ZSTD(12)),
+  post_context    String CODEC(ZSTD(12)),
+  zones           Array(String) CODEC(ZSTD(12))
+)
+ENGINE = MergeTree
+PARTITION BY toYYYYMM(created_at)
+ORDER BY (bucket_hour, repo_hid, actor_hid, term_id, detver, utterance_id, hit_id)
+SETTINGS index_granularity = 8192;
+
+CREATE INDEX IF NOT EXISTS cc_term_tokenbf ON commit_crimes (term)
+  TYPE tokenbf_v1(1024, 2, 0) GRANULARITY 64;
+
+CREATE INDEX IF NOT EXISTS cc_target_tokenbf ON commit_crimes (target_id)
+  TYPE tokenbf_v1(1024, 2, 0) GRANULARITY 64;
+
 
 CREATE VIEW v_cc_timeseries_daily AS
 SELECT toDate(created_at) AS day, detver, count() AS hits, uniqCombined(12)(utterance_id) AS utterances
@@ -306,3 +366,36 @@ SELECT toDate(created_at) AS day, actor_hid, repo_hid, detver, count() AS hits, 
 FROM commit_crimes
 GROUP BY day, actor_hid, repo_hid, detver
 ORDER BY day ASC, actor_hid ASC, hits DESC;
+
+-- Hourly Aggregates (utterances)
+CREATE TABLE utt_hour_agg
+(
+  -- Dimensions
+  bucket_hour     DateTime,  -- UTC hour
+  repo_hid        FixedString(32),
+  actor_hid       FixedString(32),
+  source          Enum8('commit' = 1, 'issue' = 2, 'pr' = 3, 'comment' = 4),
+  lang_code       LowCardinality(Nullable(String)),
+  lang_reliable   UInt8,
+
+  -- Core metrics
+  u_state         AggregateFunction(uniq, UUID),                           -- uniqState(id)
+  cnt_state       AggregateFunction(count),                                -- countState()
+
+  -- Text length
+  text_sum_state  AggregateFunction(sum, UInt64),                          -- sumState(length(text_raw))
+  text_q_state    AggregateFunction(quantilesTDigest(0.5, 0.9, 0.99), Float64),
+
+  -- Sentiment (RU-only; ignore NULLs)
+  sent_cnt_state  AggregateFunction(countIf, UInt8),
+  sent_avg_state  AggregateFunction(avgIf,   Float64, UInt8),
+  sent_q_state    AggregateFunction(quantilesTDigestIf(0.5, 0.9, 0.99), Float64, UInt8),
+
+  -- Time sanity
+  min_at_state    AggregateFunction(min, DateTime64(3)),
+  max_at_state    AggregateFunction(max, DateTime64(3))
+)
+ENGINE = AggregatingMergeTree
+PARTITION BY toYYYYMM(bucket_hour)
+ORDER BY (bucket_hour, repo_hid, actor_hid, source, ifNull(lang_code, ''), lang_reliable)
+SETTINGS index_granularity = 8192;
