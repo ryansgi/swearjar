@@ -1,7 +1,7 @@
 {
   "version": 2,
   "meta": {
-    "generated_at": "2025-09-16T19:12:50Z",
+    "generated_at": "2025-09-17T00:00:00Z",
     "name": "swearjar-rulepack-core",
     "notes": "Core/shared config. Language-specific content lives in per-lang fragments."
   },
@@ -46,28 +46,32 @@
           "id": "dependabot",
           "names": [
             "dependabot",
-            "@dependabot"
+            "@dependabot",
+            "dependabot[bot]"
           ]
         },
         {
           "id": "renovate",
           "names": [
             "renovate",
-            "@renovate"
+            "@renovate",
+            "renovate[bot]"
           ]
         },
         {
           "id": "mergify",
           "names": [
             "mergify",
-            "@mergify"
+            "@mergify",
+            "mergify[bot]"
           ]
         },
         {
           "id": "codecov",
           "names": [
             "codecov",
-            "@codecov"
+            "@codecov",
+            "codecov[bot]"
           ]
         },
         {
@@ -75,14 +79,16 @@
           "names": [
             "codeql",
             "github codeql",
-            "gh codeql"
+            "gh codeql",
+            "codeql[bot]"
           ]
         },
         {
           "id": "snyk",
           "names": [
             "snyk",
-            "@snyk"
+            "@snyk",
+            "snyk[bot]"
           ]
         },
         {
@@ -92,6 +98,20 @@
             "gh actions",
             "actions",
             "gha"
+          ]
+        },
+        {
+          "id": "greenkeeper",
+          "names": [
+            "greenkeeper",
+            "@greenkeeper"
+          ]
+        },
+        {
+          "id": "bors",
+          "names": [
+            "bors",
+            "@bors"
           ]
         },
         {
@@ -147,9 +167,68 @@
           ]
         },
         {
+          "id": "svelte",
+          "names": [
+            "svelte",
+            "sveltekit"
+          ]
+        },
+        {
+          "id": "next",
+          "names": [
+            "next",
+            "nextjs"
+          ]
+        },
+        {
+          "id": "nuxt",
+          "names": [
+            "nuxt",
+            "nuxtjs"
+          ]
+        },
+        {
+          "id": "astro",
+          "names": [
+            "astro"
+          ]
+        },
+        {
+          "id": "remix",
+          "names": [
+            "remix"
+          ]
+        },
+        {
+          "id": "express",
+          "names": [
+            "express",
+            "expressjs"
+          ]
+        },
+        {
+          "id": "nestjs",
+          "names": [
+            "nestjs",
+            "nest"
+          ]
+        },
+        {
           "id": "django",
           "names": [
             "django"
+          ]
+        },
+        {
+          "id": "flask",
+          "names": [
+            "flask"
+          ]
+        },
+        {
+          "id": "fastapi",
+          "names": [
+            "fastapi"
           ]
         },
         {
@@ -165,6 +244,56 @@
             "rails",
             "rubyonrails",
             "ruby on rails"
+          ]
+        },
+        {
+          "id": "laravel",
+          "names": [
+            "laravel"
+          ]
+        },
+        {
+          "id": "symfony",
+          "names": [
+            "symfony"
+          ]
+        },
+        {
+          "id": "phoenix",
+          "names": [
+            "phoenix"
+          ]
+        },
+        {
+          "id": "aspnet",
+          "names": [
+            "asp.net",
+            "aspnet",
+            "aspnet core"
+          ]
+        },
+        {
+          "id": "gin",
+          "names": [
+            "gin"
+          ]
+        },
+        {
+          "id": "actix",
+          "names": [
+            "actix"
+          ]
+        },
+        {
+          "id": "rocket",
+          "names": [
+            "rocket"
+          ]
+        },
+        {
+          "id": "ktor",
+          "names": [
+            "ktor"
           ]
         }
       ]
@@ -241,6 +370,89 @@
             "c\\+\\+",
             "cpp"
           ]
+        },
+        {
+          "id": "kotlin",
+          "names": [
+            "kotlin",
+            "kt"
+          ]
+        },
+        {
+          "id": "swift",
+          "names": [
+            "swift"
+          ]
+        },
+        {
+          "id": "scala",
+          "names": [
+            "scala"
+          ]
+        },
+        {
+          "id": "elixir",
+          "names": [
+            "elixir"
+          ]
+        },
+        {
+          "id": "haskell",
+          "names": [
+            "haskell"
+          ]
+        },
+        {
+          "id": "lua",
+          "names": [
+            "lua"
+          ]
+        },
+        {
+          "id": "dart",
+          "names": [
+            "dart"
+          ]
+        },
+        {
+          "id": "bash",
+          "names": [
+            "bash",
+            "shell",
+            "sh"
+          ]
+        },
+        {
+          "id": "powershell",
+          "names": [
+            "powershell",
+            "pwsh"
+          ]
+        },
+        {
+          "id": "perl",
+          "names": [
+            "perl",
+            "pl"
+          ]
+        },
+        {
+          "id": "r",
+          "names": [
+            "r"
+          ]
+        },
+        {
+          "id": "matlab",
+          "names": [
+            "matlab"
+          ]
+        },
+        {
+          "id": "julia",
+          "names": [
+            "julia"
+          ]
         }
       ]
     },
@@ -251,6 +463,12 @@
           "names": [
             "eslint",
             "@eslint"
+          ]
+        },
+        {
+          "id": "stylelint",
+          "names": [
+            "stylelint"
           ]
         },
         {
@@ -269,7 +487,14 @@
           "id": "black",
           "names": [
             "black (formatter)",
-            "black formatter"
+            "black formatter",
+            "black"
+          ]
+        },
+        {
+          "id": "isort",
+          "names": [
+            "isort"
           ]
         },
         {
@@ -282,6 +507,12 @@
           "id": "mypy",
           "names": [
             "mypy"
+          ]
+        },
+        {
+          "id": "ruff",
+          "names": [
+            "ruff"
           ]
         },
         {
@@ -306,15 +537,93 @@
           ]
         },
         {
+          "id": "mocha",
+          "names": [
+            "mocha"
+          ]
+        },
+        {
+          "id": "vitest",
+          "names": [
+            "vitest"
+          ]
+        },
+        {
+          "id": "ava",
+          "names": [
+            "ava"
+          ]
+        },
+        {
+          "id": "karma",
+          "names": [
+            "karma"
+          ]
+        },
+        {
+          "id": "webpack",
+          "names": [
+            "webpack"
+          ]
+        },
+        {
+          "id": "rollup",
+          "names": [
+            "rollup"
+          ]
+        },
+        {
+          "id": "vite",
+          "names": [
+            "vite"
+          ]
+        },
+        {
+          "id": "babel",
+          "names": [
+            "babel"
+          ]
+        },
+        {
           "id": "npm",
           "names": [
             "npm"
           ]
         },
         {
+          "id": "yarn",
+          "names": [
+            "yarn"
+          ]
+        },
+        {
           "id": "pnpm",
           "names": [
             "pnpm"
+          ]
+        },
+        {
+          "id": "bun",
+          "names": [
+            "bun"
+          ]
+        },
+        {
+          "id": "pip",
+          "names": [
+            "pip"
+          ]
+        },
+        {
+          "id": "pipenv",
+          "names": [
+            "pipenv"
+          ]
+        },
+        {
+          "id": "poetry",
+          "names": [
+            "poetry"
           ]
         },
         {
@@ -328,6 +637,87 @@
           "names": [
             "maven",
             "mvn"
+          ]
+        },
+        {
+          "id": "cmake",
+          "names": [
+            "cmake"
+          ]
+        },
+        {
+          "id": "ninja",
+          "names": [
+            "ninja"
+          ]
+        },
+        {
+          "id": "msbuild",
+          "names": [
+            "msbuild"
+          ]
+        },
+        {
+          "id": "make",
+          "names": [
+            "make"
+          ]
+        },
+        {
+          "id": "clang_tidy",
+          "names": [
+            "clang-tidy",
+            "clang tidy"
+          ]
+        },
+        {
+          "id": "pre_commit",
+          "names": [
+            "pre-commit",
+            "precommit"
+          ]
+        },
+        {
+          "id": "husky",
+          "names": [
+            "husky"
+          ]
+        },
+        {
+          "id": "lint_staged",
+          "names": [
+            "lint-staged",
+            "lint staged"
+          ]
+        },
+        {
+          "id": "coverage",
+          "names": [
+            "coverage",
+            "lcov",
+            "cobertura",
+            "istanbul",
+            "nyc"
+          ]
+        },
+        {
+          "id": "docker",
+          "names": [
+            "docker",
+            "docker-compose",
+            "compose"
+          ]
+        },
+        {
+          "id": "helm",
+          "names": [
+            "helm"
+          ]
+        },
+        {
+          "id": "kubectl",
+          "names": [
+            "kubectl"
           ]
         },
         {
@@ -345,14 +735,6 @@
             "formatter",
             "code formatter"
           ]
-        },
-        {
-          "id": "coverage",
-          "names": [
-            "coverage",
-            "lcov",
-            "cobertura"
-          ]
         }
       ]
     }
@@ -364,27 +746,12 @@
       "severity": 1
     },
     {
-      "term": "ass-backwards",
-      "category": "generic",
-      "severity": 1
-    },
-    {
       "term": "bagger",
       "category": "generic",
       "severity": 1
     },
     {
-      "term": "balls-up",
-      "category": "generic",
-      "severity": 1
-    },
-    {
       "term": "basura",
-      "category": "generic",
-      "severity": 1
-    },
-    {
-      "term": "bollocks",
       "category": "generic",
       "severity": 1
     },
@@ -422,11 +789,6 @@
       "severity": 1
     },
     {
-      "term": "crapcode",
-      "category": "generic",
-      "severity": 1
-    },
-    {
       "term": "crappy",
       "category": "generic",
       "severity": 1
@@ -438,6 +800,11 @@
     },
     {
       "term": "damn",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "damnit",
       "category": "generic",
       "severity": 1
     },
@@ -483,11 +850,6 @@
       "variants": [
         "repeat_collapse"
       ]
-    },
-    {
-      "term": "fubar",
-      "category": "generic",
-      "severity": 1
     },
     {
       "term": "fuck",
@@ -553,11 +915,6 @@
       "variants": [
         "leet"
       ]
-    },
-    {
-      "term": "half-assed",
-      "category": "generic",
-      "severity": 1
     },
     {
       "term": "hell",
@@ -640,11 +997,6 @@
       "severity": 1
     },
     {
-      "term": "piss-poor",
-      "category": "generic",
-      "severity": 1
-    },
-    {
       "term": "pissed",
       "category": "generic",
       "severity": 1
@@ -703,11 +1055,6 @@
       "severity": 1
     },
     {
-      "term": "shitcode",
-      "category": "generic",
-      "severity": 1
-    },
-    {
       "term": "shitshow",
       "category": "generic",
       "severity": 1
@@ -719,11 +1066,6 @@
       "variants": [
         "repeat_collapse"
       ]
-    },
-    {
-      "term": "snafu",
-      "category": "generic",
-      "severity": 1
     },
     {
       "term": "stfu",
@@ -1137,6 +1479,16 @@
       "severity": 2
     },
     {
+      "id": "en.bot_rage.bot_spammy",
+      "pattern": "\\b(?:{TARGET_BOT})\\s+(?:stop\\s+(?:spamming|opening\\s+prs?|breaking\\s+builds?)|is\\s+(?:spammy|noisy))\\b",
+      "category": "bot_rage",
+      "severity": 2,
+      "variants": [
+        "repeat_collapse",
+        "confusables"
+      ]
+    },
+    {
       "id": "en.bot_rage.fu_you_bot",
       "pattern": "\\bfuck\\s+you[\\s,]+(?:{TARGET_BOT})\\b",
       "category": "bot_rage",
@@ -1151,6 +1503,16 @@
         "disallow_in_code": true,
         "requires_direct_address": true
       }
+    },
+    {
+      "id": "en.bot_rage.i_hate_bot",
+      "pattern": "\\b(?:i\\s+hate|hate)\\s+(?:{TARGET_BOT})\\b",
+      "category": "bot_rage",
+      "severity": 2,
+      "variants": [
+        "repeat_collapse",
+        "confusables"
+      ]
     },
     {
       "id": "en.bot_rage.should_die",
@@ -1169,7 +1531,7 @@
     },
     {
       "id": "en.bot_rage.stupid_bot",
-      "pattern": "\\b(?:stupid|dumb|useless|braindead|worthless)\\s+(?:{TARGET_BOT})\\b",
+      "pattern": "\\b(?:stupid|dumb|useless|braindead|worthless|annoying|noisy)\\s+(?:{TARGET_BOT})\\b",
       "category": "bot_rage",
       "severity": 2,
       "variants": [
@@ -1178,13 +1540,45 @@
       ]
     },
     {
-      "id": "en.generic.wtf_target",
-      "pattern": "\\bwtf(?:\\s+(?:{TARGET_TOOL}|{TARGET_BOT}))?\\b",
+      "id": "en.generic.this_is_trash",
+      "pattern": "\\b(?:this|that|it)\\s+is\\s+(?:trash|garbage|bullshit|crap|nonsense|ridiculous)\\b",
+      "category": "generic",
+      "severity": 1,
+      "variants": [
+        "repeat_collapse",
+        "confusables"
+      ]
+    },
+    {
+      "id": "en.generic.total_mess",
+      "pattern": "\\b(?:a\\s+)?(?:dumpster\\s*fire|train\\s*wreck|cluster\\s*fuck)\\b",
+      "category": "generic",
+      "severity": 2,
+      "variants": [
+        "leet",
+        "gapped",
+        "repeat_collapse",
+        "confusables"
+      ]
+    },
+    {
+      "id": "en.generic.what_the_fuck",
+      "pattern": "\\b(?:what\\s+the\\s+fuck|wtf)\\b",
       "category": "generic",
       "severity": 1,
       "variants": [
         "leet",
         "gapped",
+        "repeat_collapse",
+        "confusables"
+      ]
+    },
+    {
+      "id": "en.lang_rage.hate_lang",
+      "pattern": "\\b(?:i\\s+hate|hate)\\s+(?:{TARGET_LANG}|{TARGET_FRAMEWORK})\\b",
+      "category": "lang_rage",
+      "severity": 2,
+      "variants": [
         "repeat_collapse",
         "confusables"
       ]
@@ -1214,6 +1608,16 @@
       ]
     },
     {
+      "id": "en.lang_rage.why_so_bad",
+      "pattern": "\\bwhy\\s+is\\s+(?:{TARGET_LANG}|{TARGET_FRAMEWORK})\\s+so\\s+(?:bad|slow|stupid|awful|annoying)\\b",
+      "category": "lang_rage",
+      "severity": 2,
+      "variants": [
+        "repeat_collapse",
+        "confusables"
+      ]
+    },
+    {
       "id": "en.tool_rage.fu_you_tool",
       "pattern": "\\bfuck\\s+you[\\s,]+(?:{TARGET_TOOL})\\b",
       "category": "tooling_rage",
@@ -1230,8 +1634,38 @@
       }
     },
     {
+      "id": "en.tool_rage.i_hate_tool",
+      "pattern": "\\b(?:i\\s+hate|hate)\\s+(?:{TARGET_TOOL})\\b",
+      "category": "tooling_rage",
+      "severity": 2,
+      "variants": [
+        "repeat_collapse",
+        "confusables"
+      ]
+    },
+    {
       "id": "en.tool_rage.keeps_breaking",
-      "pattern": "\\b(?:{TARGET_TOOL})\\s+(?:keeps|kept|is|was|continues\\s*to)\\s+(?:fail|failing|break(?:ing)?|borked|trash|garbage|useless|flaky)\\b",
+      "pattern": "\\b(?:{TARGET_TOOL})\\s+(?:keeps|kept|is|was|continues\\s*to)\\s+(?:fail|failing|break(?:ing)?|borked|trash|garbage|useless|flaky|buggy|slow)\\b",
+      "category": "tooling_rage",
+      "severity": 2,
+      "variants": [
+        "repeat_collapse",
+        "confusables"
+      ]
+    },
+    {
+      "id": "en.tool_rage.stop_it",
+      "pattern": "\\b(?:{TARGET_TOOL})\\s+(?:stop\\s+(?:breaking|failing|spamming|ruining\\s+my\\s+builds?))\\b",
+      "category": "tooling_rage",
+      "severity": 2,
+      "variants": [
+        "repeat_collapse",
+        "confusables"
+      ]
+    },
+    {
+      "id": "en.tool_rage.stupid_tool",
+      "pattern": "\\b(?:stupid|dumb|worthless|janky|annoying)\\s+(?:{TARGET_TOOL})\\b",
       "category": "tooling_rage",
       "severity": 2,
       "variants": [
@@ -1485,6 +1919,8 @@
         "javascript",
         "passcode",
         "classname",
+        "assertEquals",
+        "className",
         "class",
         "pass",
         "assert",
@@ -1496,7 +1932,9 @@
         "typescript",
         "javascript",
         "passcode",
-        "classname"
+        "classname",
+        "assertEquals",
+        "className"
       ],
       "identifier": [
         "class",
@@ -1506,9 +1944,26 @@
         "process_pass",
         "passkey",
         "typescript",
-        "javascript"
+        "javascript",
+        "className",
+        "assertEquals",
+        "class",
+        "pass",
+        "passwd",
+        "assert",
+        "process_pass",
+        "passkey",
+        "typescript",
+        "javascript",
+        "className",
+        "assertEquals"
       ],
       "url": [
+        "pass",
+        "sass",
+        "class",
+        "typescript",
+        "javascript",
         "pass",
         "sass",
         "class",
@@ -1518,6 +1973,29 @@
     }
   },
   "engine_hints": {
+    "frustration_terms": [
+      "wtf",
+      "ffs",
+      "sucks",
+      "trash",
+      "garbage",
+      "crap",
+      "shit",
+      "bullshit",
+      "broken",
+      "flaky",
+      "annoying",
+      "useless",
+      "terrible",
+      "awful",
+      "janky",
+      "borked",
+      "dumpster fire",
+      "trainwreck",
+      "garbage tier",
+      "trash tier",
+      "shitty"
+    ],
     "lang_routing": {
       "fallback": [
         "en"
