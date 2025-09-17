@@ -7,7 +7,7 @@ import (
 
 // Sanitize removes bytes/runes we don't want in DB or downstream:
 // - NUL (0x00)
-// - ASCII controls except '\n', '\r', '\t'
+// - ASCII controls
 // - DEL (0x7F)
 // - C1 controls U+0080..U+009F
 // It also drops invalid UTF-8 bytes.

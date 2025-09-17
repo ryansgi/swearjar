@@ -95,25 +95,42 @@ func leetFold(s string) string {
 	return b.String()
 }
 
-// collapseSpaces converts all unicode whitespace runs to a single ASCII space and trims ends
+// collapseSpaces converts whitespace runs to a single ASCII space, but preserves line breaks.
+// Runs that contain any newline are collapsed to a single newline. Leading/trailing spaces/newlines are trimmed
 func collapseSpaces(s string) string {
 	if s == "" {
 		return s
 	}
 	var b strings.Builder
 	b.Grow(len(s))
-	seenSpace := false
+	inWS := false
+	sawNL := false
+	flush := func() {
+		if !inWS {
+			return
+		}
+		if sawNL {
+			b.WriteByte('\n')
+		} else {
+			b.WriteByte(' ')
+		}
+		inWS = false
+		sawNL = false
+	}
 	for _, r := range s {
 		if unicode.IsSpace(r) {
-			if !seenSpace {
-				b.WriteByte(' ')
-				seenSpace = true
+			inWS = true
+			if r == '\n' || r == '\r' {
+				sawNL = true
 			}
 			continue
 		}
-		seenSpace = false
+		flush()
 		b.WriteRune(r)
 	}
+	flush()
 	out := b.String()
-	return strings.TrimSpace(out)
+	// Trim both spaces and newlines on edges
+	out = strings.Trim(out, " \n\t\r")
+	return out
 }

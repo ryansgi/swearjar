@@ -1,5 +1,5 @@
-// Package rulepack loads and compiles detection rules. It embeds a small JSON
-// file (rules.json) and prepares regex templates and lemma sets for the detector
+// Package rulepack loads and compiles detection rules from the embedded v2 rules.json.
+// It prepares regex templates and lemma sets for the detector
 package rulepack
 
 import (
@@ -14,37 +14,86 @@ import (
 //go:embed rules.json
 var embedded []byte
 
-// Raw JSON schema (stable wire form)
-type rawPack struct {
-	Version   int                 `json:"version"`
-	Templates []rawTemplate       `json:"templates"`
-	Slots     map[string][]string `json:"slots"`
-	Lemmas    []rawLemma          `json:"lemmas"`
-	Stoplist  []string            `json:"stoplist"`
+// slot aliases block (kept small; we only need names for expansion)
+type slotAlias struct {
+	ID    string   `json:"id"`
+	Names []string `json:"names"`
+}
+type slotBlock struct {
+	Aliases []slotAlias `json:"aliases"`
 }
 
-type rawTemplate struct {
-	Pattern  string `json:"pattern"`
-	Category string `json:"category"`
-	Severity int    `json:"severity"`
+type allowlistBlock struct {
+	Global []string            `json:"global"`
+	ByZone map[string][]string `json:"by_zone"`
 }
 
-type rawLemma struct {
-	Term     string `json:"term"`
-	Category string `json:"category"`
-	Severity int    `json:"severity"`
+type rawTemplateV2 struct {
+	ID             string         `json:"id"`
+	Pattern        string         `json:"pattern"`
+	Category       string         `json:"category"`
+	Severity       int            `json:"severity"`
+	Variants       []string       `json:"variants,omitempty"`
+	ContextSignals map[string]any `json:"context_signals,omitempty"`
+	Examples       []string       `json:"examples,omitempty"`
 }
 
-// Pack represents a compiled rule pack for the detector
+type rawLemmaV2 struct {
+	Term           string         `json:"term"`
+	Category       string         `json:"category"`
+	Severity       int            `json:"severity"`
+	Variants       []string       `json:"variants,omitempty"`
+	ContextSignals map[string]any `json:"context_signals,omitempty"`
+}
+
+type rawPackV2 struct {
+	Version      int                  `json:"version"`
+	Meta         map[string]any       `json:"meta"`
+	Categories   []string             `json:"categories"`
+	VariantsSpec map[string]any       `json:"variants_spec"`
+	Zones        map[string]any       `json:"zones"`
+	Slots        map[string]slotBlock `json:"slots"`
+	Lemmas       []rawLemmaV2         `json:"lemmas"`
+	Templates    []rawTemplateV2      `json:"templates"`
+	Allowlist    allowlistBlock       `json:"allowlist"`
+	EngineHints  map[string]any       `json:"engine_hints"`
+	SeverityMods []map[string]any     `json:"severity_mods"`
+}
+
+// SlotRef is a normalized reference for a single alias name
+type SlotRef struct {
+	Type string // "bot" | "tool" | "lang" | "framework" (derived from slot key)
+	ID   string // stable alias id from rules.json (e.g., "dependabot")
+}
+
+// Pack represents a compiled rule pack for the detector (minimally extended)
 type Pack struct {
 	Version int
 
-	Templates []Template // 1:1 with Compiled in index
+	// Compiled templates
+	Templates []Template // 1:1 with Compiled
 	Compiled  []*regexp.Regexp
 
+	// Lemma backstop
 	Lemmas   []Lemma
-	Stopset  map[string]struct{}
 	LemmaSet map[string]Lemma // lowercased term -> lemma meta
+
+	// Stoplist: token set to suppress lemma hits within those tokens
+	Stopset map[string]struct{}
+
+	// Optional extras (not used by detector today but handy later)
+	Meta         map[string]any
+	Categories   []string
+	VariantsSpec map[string]any
+	Zones        map[string]any
+	EngineHints  map[string]any
+	SeverityMods []map[string]any
+
+	// Flattened slot values (escaped later in expandSlots)
+	flatSlots map[string][]string
+
+	// Name -> SlotRef (both plain "name" and "@name" are present, all lowercased)
+	SlotNameToRef map[string]SlotRef
 }
 
 // Template represents a compiled regex template rule
@@ -52,44 +101,66 @@ type Template struct {
 	PatternExpanded string
 	Category        string
 	Severity        int
+	// forwarded from json (used for context gating, e.g. "frustration": true)
+	ContextSignals map[string]any
 }
 
 // Lemma represents a substring rule
 type Lemma struct {
-	Term     string
-	Category string
-	Severity int
+	Term           string
+	Category       string
+	Severity       int
+	ContextSignals map[string]any
 }
 
-// Load returns the compiled pack from the embedded rules.json
+// Load returns the compiled pack from the embedded v2 rules.json
 func Load() (*Pack, error) {
-	var rp rawPack
+	var rp rawPackV2
 	if err := json.Unmarshal(embedded, &rp); err != nil {
 		return nil, fmt.Errorf("rulepack: parse rules.json: %w", err)
 	}
-
-	p := &Pack{
-		Version: rp.Version,
-		Stopset: make(map[string]struct{}, len(rp.Stoplist)),
+	if rp.Version != 2 {
+		return nil, fmt.Errorf("rulepack: unsupported rules.json version %d (want 2)", rp.Version)
 	}
 
-	// Stoplist: set (lowercased)
-	for _, s := range rp.Stoplist {
+	p := &Pack{
+		Version:       rp.Version,
+		Stopset:       make(map[string]struct{}, 256),
+		LemmaSet:      make(map[string]Lemma, 1024),
+		Meta:          rp.Meta,
+		Categories:    rp.Categories,
+		VariantsSpec:  rp.VariantsSpec,
+		Zones:         rp.Zones,
+		EngineHints:   rp.EngineHints,
+		SeverityMods:  rp.SeverityMods,
+		SlotNameToRef: make(map[string]SlotRef, 256),
+	}
+
+	// Flatten slots for expansion: map slot -> []names (lowercased, deduped)
+	p.flatSlots = flattenSlots(rp.Slots)
+
+	// Build stoplist from allowlist (global + all by_zone values), lowercased+deduped
+	for _, s := range rp.Allowlist.Global {
 		s = strings.ToLower(strings.TrimSpace(s))
 		if s != "" {
 			p.Stopset[s] = struct{}{}
 		}
 	}
+	for _, lst := range rp.Allowlist.ByZone {
+		for _, s := range lst {
+			s = strings.ToLower(strings.TrimSpace(s))
+			if s != "" {
+				p.Stopset[s] = struct{}{}
+			}
+		}
+	}
 
-	// Compile templates: expand {SLOT} to (?:a|b|c) safely
+	// Compile templates: expand {SLOT} with flattened slot tokens (regex-quoted)
 	for _, t := range rp.Templates {
-		exp, err := expandSlots(t.Pattern, rp.Slots)
+		exp, err := expandSlots(t.Pattern, p.flatSlots)
 		if err != nil {
 			return nil, fmt.Errorf("rulepack: expand %q: %w", t.Pattern, err)
 		}
-		// We assume inputs are normalized+folded, so patterns should be plain lowercase.
-		// Add simple boundaries: we prefer matching across word-ish delimiters in text,
-		// not code identifiers. Keep conservative
 		re, err := regexp.Compile(exp)
 		if err != nil {
 			return nil, fmt.Errorf("rulepack: compile %q: %w", exp, err)
@@ -98,33 +169,55 @@ func Load() (*Pack, error) {
 			PatternExpanded: exp,
 			Category:        t.Category,
 			Severity:        t.Severity,
+			ContextSignals:  t.ContextSignals,
 		})
 		p.Compiled = append(p.Compiled, re)
 	}
 
-	// Lemmas
-	p.Lemmas = make([]Lemma, 0, len(rp.Lemmas))
-	p.LemmaSet = make(map[string]Lemma, len(rp.Lemmas))
+	// Lemmas (lowercased; ignore empty)
 	for _, l := range rp.Lemmas {
 		term := strings.ToLower(strings.TrimSpace(l.Term))
 		if term == "" {
 			continue
 		}
 		lemma := Lemma{
-			Term:     term,
-			Category: l.Category,
-			Severity: l.Severity,
+			Term:           term,
+			Category:       l.Category,
+			Severity:       l.Severity,
+			ContextSignals: l.ContextSignals,
 		}
 		p.Lemmas = append(p.Lemmas, lemma)
 		p.LemmaSet[term] = lemma
 	}
 
-	// Keep deterministic iteration for tests/debug
+	// Slots: build name -> (type,id) map (also add '@name' forms)
+	for rawKey, blk := range rp.Slots {
+		st, ok := slotKeyToType(rawKey)
+		if !ok {
+			continue
+		}
+		for _, a := range blk.Aliases {
+			id := strings.TrimSpace(a.ID)
+			if id == "" {
+				continue
+			}
+			for _, nm := range a.Names {
+				nm = strings.ToLower(strings.TrimSpace(nm))
+				if nm == "" {
+					continue
+				}
+				p.SlotNameToRef[nm] = SlotRef{Type: st, ID: id}
+				if nm[0] != '@' {
+					p.SlotNameToRef["@"+nm] = SlotRef{Type: st, ID: id}
+				}
+			}
+		}
+	}
+
+	// Deterministic iteration for tests/debug
 	sort.Slice(p.Templates, func(i, j int) bool {
 		return p.Templates[i].PatternExpanded < p.Templates[j].PatternExpanded
 	})
-	// (Compiled slice index still aligns with Templates because we constructed in order)
-
 	sort.Slice(p.Lemmas, func(i, j int) bool {
 		return p.Lemmas[i].Term < p.Lemmas[j].Term
 	})
@@ -132,9 +225,33 @@ func Load() (*Pack, error) {
 	return p, nil
 }
 
-// expandSlots replaces {NAME} with a non-capturing group of OR'ed, escaped values.
-// Unknown {NAME} leaves the token literally (so rules don't fail if slots evolve)
-func expandSlots(pattern string, slots map[string][]string) (string, error) {
+// flattenSlots converts the v2 alias blocks into simple lowercased name lists per slot
+func flattenSlots(in map[string]slotBlock) map[string][]string {
+	out := make(map[string][]string, len(in))
+	for slot, blk := range in {
+		var acc []string
+		seen := make(map[string]struct{}, 32)
+		for _, a := range blk.Aliases {
+			for _, nm := range a.Names {
+				nm = strings.ToLower(strings.TrimSpace(nm))
+				if nm == "" {
+					continue
+				}
+				if _, ok := seen[nm]; ok {
+					continue
+				}
+				seen[nm] = struct{}{}
+				acc = append(acc, nm)
+			}
+		}
+		out[slot] = acc
+	}
+	return out
+}
+
+// expandSlots replaces {NAME} with a non-capturing group of OR'ed, regex-quoted values.
+// Unknown {NAME} leaves the token literally (debug-friendly)
+func expandSlots(pattern string, flatSlots map[string][]string) (string, error) {
 	out := pattern
 	for {
 		i := strings.Index(out, "{")
@@ -143,16 +260,16 @@ func expandSlots(pattern string, slots map[string][]string) (string, error) {
 		}
 		j := strings.Index(out[i:], "}")
 		if j < 0 {
-			// Unbalanced; treat literally
-			break
+			break // unbalanced; leave as-is
 		}
 		j = i + j
 		name := out[i+1 : j]
-		values, ok := slots[name]
+
+		values, ok := flatSlots[name]
 		if !ok || len(values) == 0 {
-			// Leave as-is if slot unknown, to make debugging obvious
+			// Leave unknown slot literal (helps surface wiring mistakes)
 			out = out[:i] + "{" + name + "}" + out[j+1:]
-			// Move past this occurrence to avoid infinite loop
+			// continue after this brace to avoid infinite loop
 			k := strings.Index(out[j+1:], "{")
 			if k < 0 {
 				break
@@ -160,20 +277,29 @@ func expandSlots(pattern string, slots map[string][]string) (string, error) {
 			continue
 		}
 
-		var parts []string
+		parts := make([]string, 0, len(values))
 		for _, v := range values {
-			v = strings.ToLower(strings.TrimSpace(v))
-			if v == "" {
-				continue
-			}
+			// Values are plain strings (e.g., "c++"); QuoteMeta will escape regex chars
 			parts = append(parts, regexp.QuoteMeta(v))
-		}
-		if len(parts) == 0 {
-			parts = []string{""}
 		}
 		group := "(?:" + strings.Join(parts, "|") + ")"
 		out = out[:i] + group + out[j+1:]
 	}
-	// We do not add anchors; author controls them in patterns
+	// Inputs are assumed normalized+folded; author controls anchors
 	return strings.ToLower(out), nil
+}
+
+func slotKeyToType(k string) (string, bool) {
+	switch strings.ToUpper(strings.TrimSpace(k)) {
+	case "TARGET_BOT":
+		return "bot", true
+	case "TARGET_TOOL":
+		return "tool", true
+	case "TARGET_LANG":
+		return "lang", true
+	case "TARGET_FRAMEWORK":
+		return "framework", true
+	default:
+		return "", false
+	}
 }
