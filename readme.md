@@ -68,3 +68,7 @@ ORDER BY sum(bytes) DESC;
 ```
 docker exec -it sw_api bash -c 'GOEXPERIMENT=jsonv2 go run ./cmd/swearjar-rulepacker'
 ```
+
+# TMP
+
+docker exec -it sw_api bash -c 'GOEXPERIMENT=jsonv2 go run ./cmd/swearjar-backfill -start 2025-08-01T00 -end 2025-08-01T00 --detect --detver 1 --nightshift --ns-detver 1 --ns-retention full --ns-workers 2 --ns-leases'
