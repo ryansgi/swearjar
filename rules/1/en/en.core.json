@@ -14,8 +14,23 @@
         "typescript",
         "javascript",
         "passcode",
-        "classname"
-      ]
+        "classname",
+        "assertEquals",
+        "className"
+      ],
+      "identifier": [
+        "class",
+        "pass",
+        "passwd",
+        "assert",
+        "process_pass",
+        "passkey",
+        "typescript",
+        "javascript",
+        "className",
+        "assertEquals"
+      ],
+      "url": ["pass", "sass", "class", "typescript", "javascript"]
     }
   }
 }

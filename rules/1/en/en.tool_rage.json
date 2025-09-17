@@ -6,12 +6,7 @@
       "pattern": "\\bfuck\\s+you[\\s,]+(?:{TARGET_TOOL})\\b",
       "category": "tooling_rage",
       "severity": 3,
-      "variants": [
-        "leet",
-        "gapped",
-        "repeat_collapse",
-        "confusables"
-      ],
+      "variants": ["leet", "gapped", "repeat_collapse", "confusables"],
       "context_signals": {
         "requires_direct_address": true,
         "disallow_in_code": true
@@ -19,13 +14,31 @@
     },
     {
       "id": "en.tool_rage.keeps_breaking",
-      "pattern": "\\b(?:{TARGET_TOOL})\\s+(?:keeps|kept|is|was|continues\\s*to)\\s+(?:fail|failing|break(?:ing)?|borked|trash|garbage|useless|flaky)\\b",
+      "pattern": "\\b(?:{TARGET_TOOL})\\s+(?:keeps|kept|is|was|continues\\s*to)\\s+(?:fail|failing|break(?:ing)?|borked|trash|garbage|useless|flaky|buggy|slow)\\b",
       "category": "tooling_rage",
       "severity": 2,
-      "variants": [
-        "repeat_collapse",
-        "confusables"
-      ]
+      "variants": ["repeat_collapse", "confusables"]
+    },
+    {
+      "id": "en.tool_rage.stupid_tool",
+      "pattern": "\\b(?:stupid|dumb|worthless|janky|annoying)\\s+(?:{TARGET_TOOL})\\b",
+      "category": "tooling_rage",
+      "severity": 2,
+      "variants": ["repeat_collapse", "confusables"]
+    },
+    {
+      "id": "en.tool_rage.stop_it",
+      "pattern": "\\b(?:{TARGET_TOOL})\\s+(?:stop\\s+(?:breaking|failing|spamming|ruining\\s+my\\s+builds?))\\b",
+      "category": "tooling_rage",
+      "severity": 2,
+      "variants": ["repeat_collapse", "confusables"]
+    },
+    {
+      "id": "en.tool_rage.i_hate_tool",
+      "pattern": "\\b(?:i\\s+hate|hate)\\s+(?:{TARGET_TOOL})\\b",
+      "category": "tooling_rage",
+      "severity": 2,
+      "variants": ["repeat_collapse", "confusables"]
     }
   ]
 }

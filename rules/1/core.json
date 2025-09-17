@@ -2,7 +2,7 @@
   "version": 2,
   "meta": {
     "name": "swearjar-rulepack-core",
-    "generated_at": "2025-09-16T19:12:50Z",
+    "generated_at": "2025-09-17T00:00:00Z",
     "notes": "Core/shared config. Language-specific content lives in per-lang fragments."
   },
   "categories": [
@@ -14,15 +14,11 @@
     "lang_rage"
   ],
   "variants_spec": {
-    "gapped": {
-      "description": "Allow non-word chars between letters"
-    },
+    "gapped": { "description": "Allow non-word chars between letters" },
     "leet": {
       "description": "Conservative leet mapping (@:a,0:o,1:i/l,3:e,5:s,7:t,$:s,!:i)"
     },
-    "repeat_collapse": {
-      "description": "Collapse long character runs (>2)"
-    },
+    "repeat_collapse": { "description": "Collapse long character runs (>2)" },
     "confusables": {
       "description": "Map Unicode confusables to ASCII skeleton"
     }
@@ -36,188 +32,136 @@
       "aliases": [
         {
           "id": "dependabot",
-          "names": ["dependabot", "@dependabot"]
+          "names": ["dependabot", "@dependabot", "dependabot[bot]"]
         },
         {
           "id": "renovate",
-          "names": ["renovate", "@renovate"]
+          "names": ["renovate", "@renovate", "renovate[bot]"]
         },
-        {
-          "id": "mergify",
-          "names": ["mergify", "@mergify"]
-        },
-        {
-          "id": "codecov",
-          "names": ["codecov", "@codecov"]
-        },
+        { "id": "mergify", "names": ["mergify", "@mergify", "mergify[bot]"] },
+        { "id": "codecov", "names": ["codecov", "@codecov", "codecov[bot]"] },
         {
           "id": "codeql",
-          "names": ["codeql", "github codeql", "gh codeql"]
+          "names": ["codeql", "github codeql", "gh codeql", "codeql[bot]"]
         },
-        {
-          "id": "snyk",
-          "names": ["snyk", "@snyk"]
-        },
+        { "id": "snyk", "names": ["snyk", "@snyk", "snyk[bot]"] },
         {
           "id": "gha",
           "names": ["github actions", "gh actions", "actions", "gha"]
         },
-        {
-          "id": "circleci",
-          "names": ["circleci", "circle ci"]
-        },
-        {
-          "id": "travis",
-          "names": ["travis", "travis ci"]
-        },
-        {
-          "id": "gitlab_ci",
-          "names": ["gitlab ci", "gitlab-ci"]
-        },
-        {
-          "id": "jenkins",
-          "names": ["jenkins"]
-        }
+        { "id": "greenkeeper", "names": ["greenkeeper", "@greenkeeper"] },
+        { "id": "bors", "names": ["bors", "@bors"] },
+        { "id": "circleci", "names": ["circleci", "circle ci"] },
+        { "id": "travis", "names": ["travis", "travis ci"] },
+        { "id": "gitlab_ci", "names": ["gitlab ci", "gitlab-ci"] },
+        { "id": "jenkins", "names": ["jenkins"] }
       ]
     },
     "TARGET_TOOL": {
       "aliases": [
-        {
-          "id": "eslint",
-          "names": ["eslint", "@eslint"]
-        },
-        {
-          "id": "prettier",
-          "names": ["prettier"]
-        },
-        {
-          "id": "flake8",
-          "names": ["flake8"]
-        },
+        { "id": "eslint", "names": ["eslint", "@eslint"] },
+        { "id": "stylelint", "names": ["stylelint"] },
+        { "id": "prettier", "names": ["prettier"] },
+        { "id": "flake8", "names": ["flake8"] },
         {
           "id": "black",
-          "names": ["black (formatter)", "black formatter"]
+          "names": ["black (formatter)", "black formatter", "black"]
         },
-        {
-          "id": "pylint",
-          "names": ["pylint"]
-        },
-        {
-          "id": "mypy",
-          "names": ["mypy"]
-        },
-        {
-          "id": "golangci_lint",
-          "names": ["golangci-lint", "golangci lint"]
-        },
-        {
-          "id": "tsc",
-          "names": ["tsc", "typescript compiler", "typescript"]
-        },
-        {
-          "id": "jest",
-          "names": ["jest"]
-        },
-        {
-          "id": "npm",
-          "names": ["npm"]
-        },
-        {
-          "id": "pnpm",
-          "names": ["pnpm"]
-        },
-        {
-          "id": "gradle",
-          "names": ["gradle"]
-        },
-        {
-          "id": "maven",
-          "names": ["maven", "mvn"]
-        },
-        {
-          "id": "ci_generic",
-          "names": ["ci", "build", "pipeline", "runner"]
-        },
-        {
-          "id": "formatter",
-          "names": ["formatter", "code formatter"]
-        },
+        { "id": "isort", "names": ["isort"] },
+        { "id": "pylint", "names": ["pylint"] },
+        { "id": "mypy", "names": ["mypy"] },
+        { "id": "ruff", "names": ["ruff"] },
+        { "id": "golangci_lint", "names": ["golangci-lint", "golangci lint"] },
+        { "id": "tsc", "names": ["tsc", "typescript compiler", "typescript"] },
+        { "id": "jest", "names": ["jest"] },
+        { "id": "mocha", "names": ["mocha"] },
+        { "id": "vitest", "names": ["vitest"] },
+        { "id": "ava", "names": ["ava"] },
+        { "id": "karma", "names": ["karma"] },
+        { "id": "webpack", "names": ["webpack"] },
+        { "id": "rollup", "names": ["rollup"] },
+        { "id": "vite", "names": ["vite"] },
+        { "id": "babel", "names": ["babel"] },
+        { "id": "npm", "names": ["npm"] },
+        { "id": "yarn", "names": ["yarn"] },
+        { "id": "pnpm", "names": ["pnpm"] },
+        { "id": "bun", "names": ["bun"] },
+        { "id": "pip", "names": ["pip"] },
+        { "id": "pipenv", "names": ["pipenv"] },
+        { "id": "poetry", "names": ["poetry"] },
+        { "id": "gradle", "names": ["gradle"] },
+        { "id": "maven", "names": ["maven", "mvn"] },
+        { "id": "cmake", "names": ["cmake"] },
+        { "id": "ninja", "names": ["ninja"] },
+        { "id": "msbuild", "names": ["msbuild"] },
+        { "id": "make", "names": ["make"] },
+        { "id": "clang_tidy", "names": ["clang-tidy", "clang tidy"] },
+        { "id": "pre_commit", "names": ["pre-commit", "precommit"] },
+        { "id": "husky", "names": ["husky"] },
+        { "id": "lint_staged", "names": ["lint-staged", "lint staged"] },
         {
           "id": "coverage",
-          "names": ["coverage", "lcov", "cobertura"]
-        }
+          "names": ["coverage", "lcov", "cobertura", "istanbul", "nyc"]
+        },
+        { "id": "docker", "names": ["docker", "docker-compose", "compose"] },
+        { "id": "helm", "names": ["helm"] },
+        { "id": "kubectl", "names": ["kubectl"] },
+        { "id": "ci_generic", "names": ["ci", "build", "pipeline", "runner"] },
+        { "id": "formatter", "names": ["formatter", "code formatter"] }
       ]
     },
     "TARGET_LANG": {
       "aliases": [
-        {
-          "id": "javascript",
-          "names": ["javascript", "js", "node", "nodejs"]
-        },
-        {
-          "id": "typescript",
-          "names": ["typescript", "ts"]
-        },
-        {
-          "id": "python",
-          "names": ["python", "py"]
-        },
-        {
-          "id": "go",
-          "names": ["go", "golang"]
-        },
-        {
-          "id": "rust",
-          "names": ["rust"]
-        },
-        {
-          "id": "java",
-          "names": ["java"]
-        },
-        {
-          "id": "ruby",
-          "names": ["ruby", "rb"]
-        },
-        {
-          "id": "php",
-          "names": ["php"]
-        },
-        {
-          "id": "csharp",
-          "names": ["c#", "csharp", "dotnet", ".net"]
-        },
-        {
-          "id": "cpp",
-          "names": ["c\\+\\+", "cpp"]
-        }
+        { "id": "javascript", "names": ["javascript", "js", "node", "nodejs"] },
+        { "id": "typescript", "names": ["typescript", "ts"] },
+        { "id": "python", "names": ["python", "py"] },
+        { "id": "go", "names": ["go", "golang"] },
+        { "id": "rust", "names": ["rust"] },
+        { "id": "java", "names": ["java"] },
+        { "id": "ruby", "names": ["ruby", "rb"] },
+        { "id": "php", "names": ["php"] },
+        { "id": "csharp", "names": ["c#", "csharp", "dotnet", ".net"] },
+        { "id": "cpp", "names": ["c\\+\\+", "cpp"] },
+        { "id": "kotlin", "names": ["kotlin", "kt"] },
+        { "id": "swift", "names": ["swift"] },
+        { "id": "scala", "names": ["scala"] },
+        { "id": "elixir", "names": ["elixir"] },
+        { "id": "haskell", "names": ["haskell"] },
+        { "id": "lua", "names": ["lua"] },
+        { "id": "dart", "names": ["dart"] },
+        { "id": "bash", "names": ["bash", "shell", "sh"] },
+        { "id": "powershell", "names": ["powershell", "pwsh"] },
+        { "id": "perl", "names": ["perl", "pl"] },
+        { "id": "r", "names": ["r"] },
+        { "id": "matlab", "names": ["matlab"] },
+        { "id": "julia", "names": ["julia"] }
       ]
     },
     "TARGET_FRAMEWORK": {
       "aliases": [
-        {
-          "id": "react",
-          "names": ["react", "reactjs"]
-        },
-        {
-          "id": "vue",
-          "names": ["vue", "vuejs"]
-        },
-        {
-          "id": "angular",
-          "names": ["angular", "ng"]
-        },
-        {
-          "id": "django",
-          "names": ["django"]
-        },
-        {
-          "id": "spring",
-          "names": ["spring", "spring boot"]
-        },
-        {
-          "id": "rails",
-          "names": ["rails", "rubyonrails", "ruby on rails"]
-        }
+        { "id": "react", "names": ["react", "reactjs"] },
+        { "id": "vue", "names": ["vue", "vuejs"] },
+        { "id": "angular", "names": ["angular", "ng"] },
+        { "id": "svelte", "names": ["svelte", "sveltekit"] },
+        { "id": "next", "names": ["next", "nextjs"] },
+        { "id": "nuxt", "names": ["nuxt", "nuxtjs"] },
+        { "id": "astro", "names": ["astro"] },
+        { "id": "remix", "names": ["remix"] },
+        { "id": "express", "names": ["express", "expressjs"] },
+        { "id": "nestjs", "names": ["nestjs", "nest"] },
+        { "id": "django", "names": ["django"] },
+        { "id": "flask", "names": ["flask"] },
+        { "id": "fastapi", "names": ["fastapi"] },
+        { "id": "spring", "names": ["spring", "spring boot"] },
+        { "id": "rails", "names": ["rails", "rubyonrails", "ruby on rails"] },
+        { "id": "laravel", "names": ["laravel"] },
+        { "id": "symfony", "names": ["symfony"] },
+        { "id": "phoenix", "names": ["phoenix"] },
+        { "id": "aspnet", "names": ["asp.net", "aspnet", "aspnet core"] },
+        { "id": "gin", "names": ["gin"] },
+        { "id": "actix", "names": ["actix"] },
+        { "id": "rocket", "names": ["rocket"] },
+        { "id": "ktor", "names": ["ktor"] }
       ]
     }
   },
@@ -273,7 +217,9 @@
         "typescript",
         "javascript",
         "passcode",
-        "classname"
+        "classname",
+        "assertEquals",
+        "className"
       ],
       "identifier": [
         "class",
@@ -283,7 +229,9 @@
         "process_pass",
         "passkey",
         "typescript",
-        "javascript"
+        "javascript",
+        "className",
+        "assertEquals"
       ],
       "url": ["pass", "sass", "class", "typescript", "javascript"]
     }
@@ -305,59 +253,62 @@
       "use_script_boundaries": true,
       "word_boundary_strategy": "unicode_grapheme_or_script"
     },
-    "lang_routing": {
-      "fallback": ["en"],
-      "min_confidence": 0.6
-    }
+    "lang_routing": { "fallback": ["en"], "min_confidence": 0.6 },
+    "frustration_terms": [
+      "wtf",
+      "ffs",
+      "sucks",
+      "trash",
+      "garbage",
+      "crap",
+      "shit",
+      "bullshit",
+      "broken",
+      "flaky",
+      "annoying",
+      "useless",
+      "terrible",
+      "awful",
+      "janky",
+      "borked",
+      "dumpster fire",
+      "trainwreck",
+      "garbage tier",
+      "trash tier",
+      "shitty"
+    ]
   },
   "severity_mods": [
     {
       "id": "boost.direct_address",
-      "if": {
-        "direct_address": true
-      },
+      "if": { "direct_address": true },
       "delta": 1,
       "cap": 3
     },
     {
       "id": "boost.mention_target",
-      "if": {
-        "has_mention": true
-      },
+      "if": { "has_mention": true },
       "delta": 1,
       "cap": 3
     },
     {
       "id": "boost.repetition",
-      "if": {
-        "repeated_token": true
-      },
+      "if": { "repeated_token": true },
       "delta": 1,
       "cap": 3
     },
     {
       "id": "reduce.in_code",
-      "if": {
-        "zone": "code"
-      },
+      "if": { "zone": "code" },
       "delta": -1,
       "floor": 0
     },
     {
       "id": "reduce.in_identifier",
-      "if": {
-        "zone": "identifier"
-      },
+      "if": { "zone": "identifier" },
       "delta": -1,
       "floor": 0
     },
-    {
-      "id": "reduce.quote",
-      "if": {
-        "zone": "quote"
-      },
-      "delta": -1,
-      "floor": 0
-    }
+    { "id": "reduce.quote", "if": { "zone": "quote" }, "delta": -1, "floor": 0 }
   ]
 }

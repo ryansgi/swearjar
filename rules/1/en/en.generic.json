@@ -2,16 +2,25 @@
   "language": "en",
   "templates": [
     {
-      "id": "en.generic.wtf_target",
-      "pattern": "\\bwtf(?:\\s+(?:{TARGET_TOOL}|{TARGET_BOT}))?\\b",
+      "id": "en.generic.what_the_fuck",
+      "pattern": "\\b(?:what\\s+the\\s+fuck|wtf)\\b",
       "category": "generic",
       "severity": 1,
-      "variants": [
-        "leet",
-        "gapped",
-        "repeat_collapse",
-        "confusables"
-      ]
+      "variants": ["leet", "gapped", "repeat_collapse", "confusables"]
+    },
+    {
+      "id": "en.generic.this_is_trash",
+      "pattern": "\\b(?:this|that|it)\\s+is\\s+(?:trash|garbage|bullshit|crap|nonsense|ridiculous)\\b",
+      "category": "generic",
+      "severity": 1,
+      "variants": ["repeat_collapse", "confusables"]
+    },
+    {
+      "id": "en.generic.total_mess",
+      "pattern": "\\b(?:a\\s+)?(?:dumpster\\s*fire|train\\s*wreck|cluster\\s*fuck)\\b",
+      "category": "generic",
+      "severity": 2,
+      "variants": ["leet", "gapped", "repeat_collapse", "confusables"]
     }
   ]
 }

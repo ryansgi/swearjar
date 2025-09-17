@@ -7,11 +7,7 @@
       "severity": 2,
       "variants": ["leet", "gapped", "repeat_collapse", "confusables"]
     },
-    {
-      "term": "freaking",
-      "category": "generic",
-      "severity": 1
-    },
+    { "term": "freaking", "category": "generic", "severity": 1 },
     {
       "term": "frick",
       "category": "generic",
@@ -24,11 +20,7 @@
       "severity": 1,
       "variants": ["leet", "gapped", "repeat_collapse"]
     },
-    {
-      "term": "ffs",
-      "category": "generic",
-      "severity": 1
-    },
+    { "term": "ffs", "category": "generic", "severity": 1 },
     {
       "term": "stfu",
       "category": "generic",
@@ -53,199 +45,41 @@
       "severity": 1,
       "variants": ["repeat_collapse"]
     },
+    { "term": "horseshit", "category": "generic", "severity": 1 },
+    { "term": "shitshow", "category": "generic", "severity": 1 },
+    { "term": "crap", "category": "generic", "severity": 1 },
+    { "term": "crappy", "category": "generic", "severity": 1 },
+    { "term": "damn", "category": "generic", "severity": 1 },
+    { "term": "dammit", "category": "generic", "severity": 1 },
+    { "term": "damnit", "category": "generic", "severity": 1 },
+    { "term": "goddamn", "category": "generic", "severity": 1 },
+    { "term": "hell", "category": "generic", "severity": 1 },
+    { "term": "piss", "category": "generic", "severity": 1 },
+    { "term": "pissed", "category": "generic", "severity": 1 },
+    { "term": "pissy", "category": "generic", "severity": 1 },
+    { "term": "piss off", "category": "generic", "severity": 1 },
+    { "term": "sucks", "category": "generic", "severity": 1 },
+    { "term": "garbage", "category": "generic", "severity": 1 },
+    { "term": "trash", "category": "generic", "severity": 1 },
+    { "term": "rubbish", "category": "generic", "severity": 1 },
+    { "term": "junk", "category": "generic", "severity": 1 },
+    { "term": "piece of shit", "category": "generic", "severity": 2 },
+    { "term": "piece-of-shit", "category": "generic", "severity": 2 },
     {
-      "term": "horseshit",
+      "term": "shitty",
       "category": "generic",
-      "severity": 1
+      "severity": 1,
+      "variants": ["repeat_collapse"]
     },
-    {
-      "term": "shitshow",
-      "category": "generic",
-      "severity": 1
-    },
-    {
-      "term": "crap",
-      "category": "generic",
-      "severity": 1
-    },
-    {
-      "term": "crappy",
-      "category": "generic",
-      "severity": 1
-    },
-    {
-      "term": "damn",
-      "category": "generic",
-      "severity": 1
-    },
-    {
-      "term": "dammit",
-      "category": "generic",
-      "severity": 1
-    },
-    {
-      "term": "goddamn",
-      "category": "generic",
-      "severity": 1
-    },
-    {
-      "term": "hell",
-      "category": "generic",
-      "severity": 1
-    },
-    {
-      "term": "piss",
-      "category": "generic",
-      "severity": 1
-    },
-    {
-      "term": "pissed",
-      "category": "generic",
-      "severity": 1
-    },
-    {
-      "term": "pissy",
-      "category": "generic",
-      "severity": 1
-    },
-    {
-      "term": "piss off",
-      "category": "generic",
-      "severity": 1
-    },
-    {
-      "term": "sucks",
-      "category": "generic",
-      "severity": 1
-    },
-    {
-      "term": "garbage",
-      "category": "generic",
-      "severity": 1
-    },
-    {
-      "term": "trash",
-      "category": "generic",
-      "severity": 1
-    },
-    {
-      "term": "rubbish",
-      "category": "generic",
-      "severity": 1
-    },
-    {
-      "term": "junk",
-      "category": "generic",
-      "severity": 1
-    },
-    {
-      "term": "asshole",
-      "category": "harassment",
-      "severity": 2
-    },
-    {
-      "term": "arsehole",
-      "category": "harassment",
-      "severity": 2
-    },
-    {
-      "term": "jackass",
-      "category": "harassment",
-      "severity": 2
-    },
-    {
-      "term": "dumbass",
-      "category": "harassment",
-      "severity": 2
-    },
-    {
-      "term": "smartass",
-      "category": "harassment",
-      "severity": 1
-    },
-    {
-      "term": "asshat",
-      "category": "harassment",
-      "severity": 1
-    },
-    {
-      "term": "asswipe",
-      "category": "harassment",
-      "severity": 2
-    },
-    {
-      "term": "bastard",
-      "category": "harassment",
-      "severity": 2
-    },
-    {
-      "term": "bastards",
-      "category": "harassment",
-      "severity": 2
-    },
-    {
-      "term": "jerk",
-      "category": "harassment",
-      "severity": 1
-    },
-    {
-      "term": "idiot",
-      "category": "harassment",
-      "severity": 1
-    },
-    {
-      "term": "moron",
-      "category": "harassment",
-      "severity": 1
-    },
-    {
-      "term": "imbecile",
-      "category": "harassment",
-      "severity": 1
-    },
-    {
-      "term": "stupid",
-      "category": "harassment",
-      "severity": 1
-    },
-    {
-      "term": "useless",
-      "category": "harassment",
-      "severity": 1
-    },
-    {
-      "term": "i blew it",
-      "category": "self_own",
-      "severity": 1
-    },
-    {
-      "term": "botched",
-      "category": "self_own",
-      "severity": 1
-    },
-    {
-      "term": "hosed",
-      "category": "self_own",
-      "severity": 1
-    },
-    { "term": "borked", "category": "generic", "severity": 1 },
+    { "term": "shit-tier", "category": "generic", "severity": 1 },
+    { "term": "garbage fire", "category": "generic", "severity": 1 },
     { "term": "dumpster fire", "category": "generic", "severity": 1 },
+    { "term": "dumpster-fire", "category": "generic", "severity": 1 },
     { "term": "trainwreck", "category": "generic", "severity": 1 },
     { "term": "garbage-tier", "category": "generic", "severity": 1 },
     { "term": "trash-tier", "category": "generic", "severity": 1 },
-    { "term": "dogshit", "category": "generic", "severity": 2 },
-    { "term": "we messed up", "category": "self_own", "severity": 1 },
-    { "term": "we screwed up", "category": "self_own", "severity": 1 },
-    { "term": "my bad", "category": "self_own", "severity": 1 },
-    { "term": "i messed up", "category": "self_own", "severity": 1 },
-    { "term": "i screwed up", "category": "self_own", "severity": 1 },
-    { "term": "oops", "category": "self_own", "severity": 1 },
-    {
-      "term": "clusterfuck",
-      "category": "generic",
-      "severity": 2,
-      "variants": ["leet", "gapped", "repeat_collapse"]
-    },
+    { "term": "borked", "category": "generic", "severity": 1 },
+    { "term": "janky", "category": "generic", "severity": 1 },
     {
       "term": "fuckup",
       "category": "generic",
@@ -259,8 +93,43 @@
       "severity": 2,
       "variants": ["repeat_collapse"]
     },
+    {
+      "term": "clusterfuck",
+      "category": "generic",
+      "severity": 2,
+      "variants": ["leet", "gapped", "repeat_collapse"]
+    },
     { "term": "fuckery", "category": "generic", "severity": 2 },
+    { "term": "dogshit", "category": "generic", "severity": 2 },
 
+    { "term": "i blew it", "category": "self_own", "severity": 1 },
+    { "term": "we messed up", "category": "self_own", "severity": 1 },
+    { "term": "we screwed up", "category": "self_own", "severity": 1 },
+    { "term": "my bad", "category": "self_own", "severity": 1 },
+    { "term": "i messed up", "category": "self_own", "severity": 1 },
+    { "term": "i screwed up", "category": "self_own", "severity": 1 },
+    { "term": "oops", "category": "self_own", "severity": 1 },
+    { "term": "botched", "category": "self_own", "severity": 1 },
+    { "term": "hosed", "category": "self_own", "severity": 1 },
+
+    { "term": "asshole", "category": "harassment", "severity": 2 },
+    { "term": "arsehole", "category": "harassment", "severity": 2 },
+    { "term": "jackass", "category": "harassment", "severity": 2 },
+    { "term": "dumbass", "category": "harassment", "severity": 2 },
+    { "term": "smartass", "category": "harassment", "severity": 1 },
+    { "term": "asshat", "category": "harassment", "severity": 1 },
+    { "term": "asswipe", "category": "harassment", "severity": 2 },
+    { "term": "bastard", "category": "harassment", "severity": 2 },
+    { "term": "bastards", "category": "harassment", "severity": 2 },
+    { "term": "jerk", "category": "harassment", "severity": 1 },
+    { "term": "idiot", "category": "harassment", "severity": 1 },
+    { "term": "moron", "category": "harassment", "severity": 1 },
+    { "term": "imbecile", "category": "harassment", "severity": 1 },
+    { "term": "stupid", "category": "harassment", "severity": 1 },
+    { "term": "useless", "category": "harassment", "severity": 1 },
+    { "term": "brain-dead", "category": "harassment", "severity": 1 },
+    { "term": "dumbfuck", "category": "harassment", "severity": 2 },
+    { "term": "numbnuts", "category": "harassment", "severity": 1 },
     {
       "term": "cunt",
       "category": "harassment",
@@ -283,35 +152,6 @@
       "severity": 3,
       "variants": ["leet", "repeat_collapse"]
     },
-    { "term": "son of a bitch", "category": "harassment", "severity": 2 },
-
-    { "term": "piece of shit", "category": "generic", "severity": 2 },
-    { "term": "piece-of-shit", "category": "generic", "severity": 2 },
-    {
-      "term": "shitty",
-      "category": "generic",
-      "severity": 1,
-      "variants": ["repeat_collapse"]
-    },
-    { "term": "shit-tier", "category": "generic", "severity": 1 },
-    { "term": "garbage fire", "category": "generic", "severity": 1 },
-    { "term": "dumpster-fire", "category": "generic", "severity": 1 },
-
-    { "term": "piss-poor", "category": "generic", "severity": 1 },
-    { "term": "half-assed", "category": "generic", "severity": 1 },
-    { "term": "ass-backwards", "category": "generic", "severity": 1 },
-    { "term": "balls-up", "category": "generic", "severity": 1 },
-
-    { "term": "bollocks", "category": "generic", "severity": 1 },
-    { "term": "fubar", "category": "generic", "severity": 1 },
-    { "term": "snafu", "category": "generic", "severity": 1 },
-
-    { "term": "janky", "category": "generic", "severity": 1 },
-    { "term": "shitcode", "category": "generic", "severity": 1 },
-    { "term": "crapcode", "category": "generic", "severity": 1 },
-
-    { "term": "brain-dead", "category": "harassment", "severity": 1 },
-    { "term": "dumbfuck", "category": "harassment", "severity": 2 },
-    { "term": "numbnuts", "category": "harassment", "severity": 1 }
+    { "term": "son of a bitch", "category": "harassment", "severity": 2 }
   ]
 }
