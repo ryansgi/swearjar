@@ -16,6 +16,7 @@ import (
 	metamod "swearjar/internal/services/api/meta/module"
 	samplesmod "swearjar/internal/services/api/samples/module"
 	statsmod "swearjar/internal/services/api/stats/module"
+	swearjarmod "swearjar/internal/services/api/swearjar/module"
 
 	// Worker bouncer module (owns the Enqueuer port)
 	workerbouncer "swearjar/internal/services/bouncer/module"
@@ -40,7 +41,7 @@ func Mount(r phttp.Router, opt Options) {
 	}
 
 	// Construct the WORKER bouncer module first and extract its Enqueuer port
-	wbOpts := workerbouncer.FromConfig(deps.Cfg) // <- Options required by worker module
+	wbOpts := workerbouncer.FromConfig(deps.Cfg)
 	workerBouncer := workerbouncer.New(deps, wbOpts)
 	enq := module.MustPortsOf[workerbouncer.Ports](workerBouncer).Enqueuer
 
@@ -56,6 +57,7 @@ func Mount(r phttp.Router, opt Options) {
 		metamod.New(deps),
 		statsmod.New(deps),
 		samplesmod.New(deps),
+		swearjarmod.New(deps),
 		workerBouncer, // include worker so its ports are registered
 		apiBouncer,    // API module that depends on the worker's Enqueuer
 	}
@@ -75,7 +77,7 @@ func Mount(r phttp.Router, opt Options) {
 		}
 	})
 
-	// TODO: Remove/create middleware or endpoint for this.
+	// TODO: Remove/create middleware or endpoint for this
 	// if mux, ok := r.Mux().(*chi.Mux); ok {
 	// 	_ = chi.Walk(mux, func(method string, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
 	// 		fmt.Println(method, route)

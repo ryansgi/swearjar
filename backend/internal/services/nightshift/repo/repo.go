@@ -49,12 +49,13 @@ func (s *hybridStore) Start(ctx context.Context, hour time.Time) error {
 	return nil
 }
 
+// WriteArchives populates denormalized commit_crimes for the hour+detver
 func (s *hybridStore) WriteArchives(ctx context.Context, hour time.Time, detver int) (int, error) {
-	// Populate denormalized commit_crimes for the hour+detver
+	// Hour window
 	start := hour.Truncate(time.Hour).UTC()
 	end := start.Add(time.Hour)
 
-	// If no raw hits exist for this hour, keep existing slice and skip
+	// Fast exit: no hits in this hour
 	hasHits, err := s.ch.ScalarUInt64(ctx, `
 		SELECT toUInt64(count())
 		FROM swearjar.hits
@@ -68,7 +69,7 @@ func (s *hybridStore) WriteArchives(ctx context.Context, hour time.Time, detver 
 		return 0, nil
 	}
 
-	// Clear hour slice (idempotent) and block until applied so reads are consistent
+	// Clear existing slice for this hour+detver (idempotent) and wait until applied
 	if err := s.ch.Exec(ctx, `
 		ALTER TABLE swearjar.commit_crimes
 		DELETE WHERE bucket_hour = toStartOfHour(?) AND detver = ?
@@ -78,7 +79,7 @@ func (s *hybridStore) WriteArchives(ctx context.Context, hour time.Time, detver 
 		return 0, err
 	}
 
-	// Insert from hits & utterances
+	// Insert from hits & utterances, carrying targeting + detector context fields
 	if err := s.ch.Exec(ctx, `
 		INSERT INTO swearjar.commit_crimes
 		(
@@ -86,8 +87,10 @@ func (s *hybridStore) WriteArchives(ctx context.Context, hour time.Time, detver 
 		  hit_id, utterance_id, repo_hid, actor_hid,
 		  source, source_detail,
 		  lang_code, lang_confidence, lang_reliable, sentiment_score, text_len,
-		  term_id, term, category, severity, target,
-		  span_start, span_end
+		  term_id, term, category, severity,
+		  ctx_action, target_type, target_id, target_name, target_span_start, target_span_end, target_distance,
+		  span_start, span_end,
+		  detector_source, pre_context, post_context, zones
 		)
 		SELECT
 		  h.created_at,
@@ -103,8 +106,10 @@ func (s *hybridStore) WriteArchives(ctx context.Context, hour time.Time, detver 
 		  cityHash64(lower(h.term))                      AS term_id,
 		  h.term,
 		  h.category, h.severity,
-		  CAST(NULL AS Nullable(String))                 AS target,
-		  h.span_start, h.span_end
+		  h.ctx_action, h.target_type, h.target_id, h.target_name,
+		  h.target_span_start, h.target_span_end, h.target_distance,
+		  h.span_start, h.span_end,
+		  h.detector_source, h.pre_context, h.post_context, h.zones
 		FROM swearjar.hits h
 		INNER JOIN swearjar.utterances u ON u.id = h.utterance_id
 		WHERE h.created_at >= ? AND h.created_at < ?`,
@@ -124,6 +129,49 @@ func (s *hybridStore) WriteArchives(ctx context.Context, hour time.Time, detver 
 		return 0, err
 	}
 	return int(rows), nil
+}
+
+// SnapshotUttHourAgg inserts hourly uniq/count/etc states for the hour.
+// Safe to call multiple times (AggregatingMergeTree merges states)
+func (s *hybridStore) SnapshotUttHourAgg(ctx context.Context, hour time.Time) error {
+	start := hour.Truncate(time.Hour).UTC()
+	end := start.Add(time.Hour)
+
+	// Fast exit: nothing to snapshot for this hour
+	haveUtt, err := s.ch.ScalarUInt64(ctx, `
+        SELECT toUInt64(count()) FROM swearjar.utterances
+        WHERE created_at >= ? AND created_at < ?`, start, end)
+	if err != nil {
+		return err
+	}
+	if haveUtt == 0 {
+		return nil
+	}
+
+	return s.ch.Exec(ctx, `
+        INSERT INTO swearjar.utt_hour_agg
+        SELECT
+          toStartOfHour(created_at) AS bucket_hour,
+          repo_hid,
+          actor_hid,
+          source,
+          lang_code,
+          lang_reliable,
+          uniqState(id)                                                                AS u_state,
+          /* optional extras if you added the columns: */
+          countState()                                                                 AS cnt_state,
+          sumState(toUInt64(length(text_raw)))                                         AS text_sum_state,
+          quantilesTDigestState(0.5, 0.9, 0.99)(toFloat64(length(text_raw)))          AS text_q_state,
+          countIfState(sentiment_score IS NOT NULL)                                    AS sent_cnt_state,
+          avgStateIf(toFloat64(sentiment_score), sentiment_score IS NOT NULL)          AS sent_avg_state,
+          quantilesTDigestStateIf(0.5, 0.9, 0.99)(
+              toFloat64(sentiment_score), sentiment_score IS NOT NULL)                 AS sent_q_state,
+          minState(created_at)                                                         AS min_at_state,
+          maxState(created_at)                                                         AS max_at_state
+        FROM swearjar.utterances
+        WHERE created_at >= ? AND created_at < ?
+        GROUP BY bucket_hour, repo_hid, actor_hid, source, lang_code, lang_reliable
+    `, start, end)
 }
 
 // PruneRaw applies the configured retention policy to raw facts in ClickHouse.

@@ -17,8 +17,8 @@ import (
 )
 
 // NewHybrid returns a binder that uses:
-//   - Postgres (via the provided Queryer) for hour accounting (ingest_hours)
-//   - ClickHouse (provided here) for facts (utterances)
+// - Postgres (via the provided Queryer) for hour accounting (ingest_hours)
+// - ClickHouse (provided here) for facts (utterances)
 func NewHybrid(ch store.Clickhouse) repokit.Binder[domain.StorageRepo] {
 	return &hybridBinder{ch: ch}
 }

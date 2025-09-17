@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"hash/fnv"
+	"strings"
 
 	"swearjar/internal/platform/store"
 	dom "swearjar/internal/services/hits/domain"
@@ -18,15 +19,43 @@ type CH struct {
 // NewCH constructs a new hits repo with a required CH instance
 func NewCH(ch store.Clickhouse) *CH { return &CH{ch: ch} }
 
-// WriteBatch inserts hits into swearjar.hits using a column list
+// WriteBatch inserts hits into swearjar.hits using a column list.
+// If LangCode is empty for any hit, we hydrate it from swearjar.utterances(id)
+// so that hits.lang_code mirrors the language computed at utterance insert
 func (r *CH) WriteBatch(ctx context.Context, xs []dom.HitWrite) error {
 	if len(xs) == 0 {
 		return nil
 	}
 
+	// Collect utterance_ids that need lang hydration
+	missing := make([]string, 0, len(xs))
+	for _, h := range xs {
+		if strings.TrimSpace(h.LangCode) == "" {
+			missing = append(missing, h.UtteranceID)
+		}
+	}
+
+	// Batch-lookup lang_code from utterances for the missing set
+	if len(missing) > 0 {
+		langByUtt, err := r.lookupLangByUtterance(ctx, missing)
+		if err != nil {
+			return err
+		}
+		for i := range xs {
+			if strings.TrimSpace(xs[i].LangCode) == "" {
+				if lc, ok := langByUtt[xs[i].UtteranceID]; ok && strings.TrimSpace(lc) != "" {
+					xs[i].LangCode = lc
+				}
+			}
+		}
+	}
+
 	const table = "swearjar.hits (" +
 		"id, utterance_id, created_at, source, repo_hid, actor_hid, " +
-		"lang_code, term, category, severity, span_start, span_end, detector_version, " +
+		"lang_code, term, category, severity, " +
+		"ctx_action, target_type, target_id, target_name, target_span_start, target_span_end, target_distance, " +
+		"span_start, span_end, " +
+		"detector_version, detector_source, pre_context, post_context, zones, " +
 		"ingest_batch_id, ver" +
 		")"
 
@@ -34,32 +63,146 @@ func (r *CH) WriteBatch(ctx context.Context, xs []dom.HitWrite) error {
 
 	rows := make([][]any, 0, len(xs))
 	for _, h := range xs {
+		// lang_code -> Nullable(String)
 		var lang any
-		if h.LangCode == "" {
+		if strings.TrimSpace(h.LangCode) == "" {
 			lang = nil
 		} else {
 			lang = h.LangCode
 		}
+
+		// detector_source -> Enum8 label
+		dsrc := h.DetectorSource
+		if dsrc == "" {
+			dsrc = "lemma"
+		}
+
+		// zones -> Array(String)
+		zones := h.Zones
+		if zones == nil {
+			zones = []string{}
+		}
+
+		// context targeting fields
+		ctxAction := h.CtxAction
+		if ctxAction == "" {
+			ctxAction = "none"
+		}
+		tType := h.TargetType
+		if tType == "" {
+			tType = "none"
+		}
+
+		tID := h.TargetID // LowCardinality(String) non-null; empty "" is OK
+		var tName any
+		if h.TargetName == nil || strings.TrimSpace(*h.TargetName) == "" {
+			tName = nil
+		} else {
+			tName = *h.TargetName
+		}
+
+		var tStart any
+		if h.TargetSpanStart != nil {
+			tStart = int32(*h.TargetSpanStart)
+		} else {
+			tStart = nil
+		}
+		var tEnd any
+		if h.TargetSpanEnd != nil {
+			tEnd = int32(*h.TargetSpanEnd)
+		} else {
+			tEnd = nil
+		}
+		var tDist any
+		if h.TargetDistance != nil {
+			tDist = int32(*h.TargetDistance)
+		} else {
+			tDist = nil
+		}
+
 		rows = append(rows, []any{
-			h.DeterministicUUID().String(), // Hit ID
-			h.UtteranceID,                  // UUID (String OK)
-			h.CreatedAt.UTC(),              // DateTime64(3)
-			h.Source,                       // Enum8 string
-			[]byte(h.RepoHID),              // FixedString(32)
-			[]byte(h.ActorHID),             // FixedString(32)
-			lang,                           // Nullable(String)
-			h.Term,                         // String
-			h.Category,                     // Enum8 string (label)
-			h.Severity,                     // Enum8 string (label)
-			h.SpanStart,                    // Int32
-			h.SpanEnd,                      // Int32
-			h.DetectorVersion,              // Int32
-			batchID,                        // ingest_batch_id (UInt64)
-			batchID,                        // ver (ReplacingMergeTree version; same hash = idempotent)
+			h.DeterministicUUID().String(), // id
+			h.UtteranceID,                  // utterance_id
+			h.CreatedAt.UTC(),              // created_at
+			h.Source,                       // source (Enum8 label)
+			[]byte(h.RepoHID),              // repo_hid
+			[]byte(h.ActorHID),             // actor_hid
+			lang,                           // lang_code (Nullable)
+
+			h.Term,     // term
+			h.Category, // category (Enum8 label)
+			h.Severity, // severity (Enum8 label)
+
+			ctxAction, // ctx_action (Enum8 label)
+			tType,     // target_type (Enum8 label)
+			tID,       // target_id (LC(String))
+			tName,     // target_name (Nullable)
+			tStart,    // target_span_start (Nullable(Int32))
+			tEnd,      // target_span_end   (Nullable(Int32))
+			tDist,     // target_distance   (Nullable(Int32))
+
+			h.SpanStart,       // span_start
+			h.SpanEnd,         // span_end
+			h.DetectorVersion, // detector_version
+			dsrc,              // detector_source
+			h.PreContext,      // pre_context
+			h.PostContext,     // post_context
+			zones,             // zones (Array(String))
+			batchID,           // ingest_batch_id
+			batchID,           // ver
 		})
 	}
 
 	return r.ch.Insert(ctx, table, rows)
+}
+
+// lookupLangByUtterance returns a map[utterance_id]string for a set of IDs.
+// It chunks the IN-list to avoid oversized query params on large batches
+func (r *CH) lookupLangByUtterance(ctx context.Context, uttIDs []string) (map[string]string, error) {
+	out := make(map[string]string, len(uttIDs))
+	if len(uttIDs) == 0 {
+		return out, nil
+	}
+
+	const chunkSize = 1000
+	for i := 0; i < len(uttIDs); i += chunkSize {
+		j := i + chunkSize
+		if j > len(uttIDs) {
+			j = len(uttIDs)
+		}
+		chunk := uttIDs[i:j]
+
+		// Build "(toUUID(?), toUUID(?), ...)" with args = chunk ids
+		ph := make([]string, len(chunk))
+		args := make([]any, 0, len(chunk))
+		for k, id := range chunk {
+			ph[k] = "toUUID(?)"
+			args = append(args, id)
+		}
+		q := `
+			SELECT toString(id) AS utterance_id, lang_code
+			FROM swearjar.utterances
+			WHERE id IN (` + strings.Join(ph, ",") + `)
+		`
+
+		rows, err := r.ch.Query(ctx, q, args...)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var id string
+			var lang *string // Nullable(String)
+			if err := rows.Scan(&id, &lang); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			if lang != nil && strings.TrimSpace(*lang) != "" {
+				out[id] = *lang
+			}
+		}
+		rows.Close()
+	}
+	return out, nil
 }
 
 // ListSamples returns hits joined with utterances with keyset pagination.
@@ -296,10 +439,7 @@ func coalesce(s, def string) string {
 func batchID64(xs []dom.HitWrite) uint64 {
 	const N = 32
 	h := fnv.New64a()
-	n := len(xs)
-	if n > N {
-		n = N
-	}
+	n := min(len(xs), N)
 	var buf [8]byte
 	for i := 0; i < n; i++ {
 		x := xs[i]

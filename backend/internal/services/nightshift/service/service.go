@@ -109,7 +109,7 @@ func (s *Service) applyHourUnlocked(ctx context.Context, hour time.Time) (retErr
 				HitsArchived: insertedCC,
 				DeletedRaw:   delRaw,
 				SparedRaw:    sparedRaw,
-				ArchiveMS:    loadCCMS,
+				ArchiveMS:    loadCCMS, // includes snapshot time
 				PruneMS:      pruneMS,
 				TotalMS:      int(time.Since(start).Milliseconds()),
 				ErrText:      errText,
@@ -125,27 +125,42 @@ func (s *Service) applyHourUnlocked(ctx context.Context, hour time.Time) (retErr
 			insertedCC = n
 			return e
 		})
-		loadCCMS = int(time.Since(t0).Milliseconds())
+		loadCCMS += int(time.Since(t0).Milliseconds())
 		if err != nil {
 			errText = err.Error()
 			retErr = err
-			return retErr // defer will handle Finish/lease clear
+			return retErr
+		}
+	}
+
+	// Snapshot utterance denominators into utt_hour_agg BEFORE pruning.
+	// Always run (even if insertedCC == 0); repo will no-op if there are no utterances
+	{
+		t1 := time.Now()
+		err := s.DB.Tx(ctx, func(q repokit.Queryer) error {
+			return s.Binder.Bind(q).SnapshotUttHourAgg(ctx, hour)
+		})
+		loadCCMS += int(time.Since(t1).Milliseconds()) // roll into ArchiveMS
+		if err != nil {
+			errText = err.Error()
+			retErr = err
+			return retErr
 		}
 	}
 
 	// Prune per policy
 	{
-		t1 := time.Now()
+		t2 := time.Now()
 		err := s.DB.Tx(ctx, func(q repokit.Queryer) error {
 			d, ssp, e := s.Binder.Bind(q).PruneRaw(ctx, hour, s.Cfg.RetentionMode)
 			delRaw, sparedRaw = d, ssp
 			return e
 		})
-		pruneMS = int(time.Since(t1).Milliseconds())
+		pruneMS = int(time.Since(t2).Milliseconds())
 		if err != nil {
 			errText = err.Error()
 			retErr = err
-			return retErr // defer will handle Finish/lease clear
+			return retErr
 		}
 	}
 

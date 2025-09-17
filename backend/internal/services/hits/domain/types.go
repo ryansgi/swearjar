@@ -15,7 +15,9 @@ type Window struct {
 	Until time.Time
 }
 type (
+	// Category represents the category of a hit
 	Category = string
+	// Severity represents the severity level of a hit
 	Severity = string
 )
 
@@ -45,15 +47,31 @@ type HitWrite struct {
 	Source      string
 	RepoHID     []byte
 	ActorHID    []byte
-	LangCode    string // nil => NULL in DB
+	LangCode    string // empty => NULL in DB
 	Term        string
 	Category    Category
 	Severity    Severity
-	// Category        string // hit_category_enum
-	// Severity        string // hit_severity_enum
+
+	// Span in normalized text
 	SpanStart       int
 	SpanEnd         int
 	DetectorVersion int
+
+	// Detector metadata
+	DetectorSource string   // "template" | "lemma"
+	PreContext     string   // TEXT
+	PostContext    string   // TEXT
+	Zones          []string // Array(String)
+
+	// Context gating / targeting (persisted 1:1 to ClickHouse)
+	// Enum8 labels in CH expect non-empty strings; repo will coerce "" -> "none" where applicable
+	CtxAction       string  // "none" | "upgraded" | "downgraded"
+	TargetType      string  // "none" | "bot" | "tool" | "lang" | "framework"
+	TargetID        string  // LowCardinality(String); empty -> ""
+	TargetName      *string // Nullable(String)
+	TargetSpanStart *int    // Nullable(Int32)
+	TargetSpanEnd   *int    // Nullable(Int32)
+	TargetDistance  *int    // Nullable(Int32)
 }
 
 // Sample represents a hit sample with associated metadata

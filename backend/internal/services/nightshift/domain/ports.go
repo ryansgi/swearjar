@@ -33,6 +33,9 @@ type StorageRepo interface {
 	// It should be safe to re-run (idempotent via hour+ids)
 	WriteArchives(ctx context.Context, hour time.Time, detver int) (hits int, err error)
 
+	// SnapshotUttHourAgg inserts hourly uniq/count/etc states for the hour
+	SnapshotUttHourAgg(ctx context.Context, hour time.Time) error
+
 	// PruneRaw applies the configured retention policy to raw utterances (and anything else):
 	//   - "full": no-op
 	//   - "timebox:<Nd>": delete raw older than cutoff, keeping hit-backed rows if policy says so
