@@ -1,0 +1,46 @@
+# Defaults if caller doesn't pass UID/GID at build
+ARG UID=1000
+ARG GID=1000
+
+FROM node:24-slim
+
+# Useful basics for debugging/healthchecks
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends procps curl \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN npm i -g npm@latest
+
+# Re-declare build args in this stage
+ARG UID
+ARG GID
+
+ENV NODE_ENV=development
+
+# Give npm a real home/cache dir owned by the runtime user
+ENV HOME=/home/frontend
+ENV NPM_CONFIG_CACHE=/home/frontend/.npm
+
+# If UID:GID are defaults, reuse the built-in 'node' user (1000:1000)
+# Otherwise create a dedicated user/group that matches the host
+RUN if [ "$UID" -eq 1000 ] && [ "$GID" -eq 1000 ]; then \
+      echo "Using default node user"; \
+    else \
+      echo "Creating appuser with UID=$UID and GID=$GID"; \
+      groupadd -g "$GID" appgroup && \
+      useradd -m -u "$UID" -g appgroup appuser; \
+    fi
+
+# Ensure HOME exists and is owned by the runtime uid/gid
+RUN mkdir -p /home/frontend && chown -R "$UID":"$GID" /home/frontend
+
+# Run as the numeric uid (works whether it's node or appuser)
+USER ${UID}
+
+# We'll mount the repo at /workspace from docker-compose
+WORKDIR /workspace
+
+EXPOSE 5173
+
+# Dependency-free preflight; docker-compose can override later (e.g., npm run dev)
+CMD ["node", "src/index.js"]
