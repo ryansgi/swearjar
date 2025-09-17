@@ -1,188 +1,1597 @@
 {
-  "version": 1,
-  "templates": [
-    {
-      "pattern": "\\bfuck\\s+you[\\s,]+(?:{TARGET_BOT})\\b",
-      "category": "bot_rage",
-      "severity": 3
+  "version": 2,
+  "meta": {
+    "generated_at": "2025-09-16T19:12:50Z",
+    "name": "swearjar-rulepack-core",
+    "notes": "Core/shared config. Language-specific content lives in per-lang fragments."
+  },
+  "categories": [
+    "generic",
+    "harassment",
+    "self_own",
+    "tooling_rage",
+    "bot_rage",
+    "lang_rage"
+  ],
+  "variants_spec": {
+    "confusables": {
+      "description": "Map Unicode confusables to ASCII skeleton"
     },
-    {
-      "pattern": "\\bfuck\\s+you[\\s,]+(?:{TARGET_TOOL})\\b",
-      "category": "tooling_rage",
-      "severity": 3
+    "gapped": {
+      "description": "Allow non-word chars between letters"
     },
-    {
-      "pattern": "\\b(?:{TARGET_BOT})\\s+(?:can|should)\\s+(?:die|fuck off)\\b",
-      "category": "bot_rage",
-      "severity": 3
+    "leet": {
+      "description": "Conservative leet mapping (@:a,0:o,1:i/l,3:e,5:s,7:t,$:s,!:i)"
     },
-    {
-      "pattern": "\\b(?:{TARGET_TOOL})\\s+(?:can|should)\\s+(?:die|fuck off)\\b",
-      "category": "tooling_rage",
-      "severity": 3
+    "repeat_collapse": {
+      "description": "Collapse long character runs (\u003e2)"
+    }
+  },
+  "zones": {
+    "names": [
+      "plain",
+      "quote",
+      "code",
+      "identifier",
+      "url",
+      "email",
+      "emoji"
+    ],
+    "notes": "Engines may apply severity dampening by zone."
+  },
+  "slots": {
+    "TARGET_BOT": {
+      "aliases": [
+        {
+          "id": "dependabot",
+          "names": [
+            "dependabot",
+            "@dependabot"
+          ]
+        },
+        {
+          "id": "renovate",
+          "names": [
+            "renovate",
+            "@renovate"
+          ]
+        },
+        {
+          "id": "mergify",
+          "names": [
+            "mergify",
+            "@mergify"
+          ]
+        },
+        {
+          "id": "codecov",
+          "names": [
+            "codecov",
+            "@codecov"
+          ]
+        },
+        {
+          "id": "codeql",
+          "names": [
+            "codeql",
+            "github codeql",
+            "gh codeql"
+          ]
+        },
+        {
+          "id": "snyk",
+          "names": [
+            "snyk",
+            "@snyk"
+          ]
+        },
+        {
+          "id": "gha",
+          "names": [
+            "github actions",
+            "gh actions",
+            "actions",
+            "gha"
+          ]
+        },
+        {
+          "id": "circleci",
+          "names": [
+            "circleci",
+            "circle ci"
+          ]
+        },
+        {
+          "id": "travis",
+          "names": [
+            "travis",
+            "travis ci"
+          ]
+        },
+        {
+          "id": "gitlab_ci",
+          "names": [
+            "gitlab ci",
+            "gitlab-ci"
+          ]
+        },
+        {
+          "id": "jenkins",
+          "names": [
+            "jenkins"
+          ]
+        }
+      ]
     },
-
-    {
-      "pattern": "\\b(?:stupid|dumb|useless)\\s+(?:{TARGET_BOT})\\b",
-      "category": "bot_rage",
-      "severity": 2
+    "TARGET_FRAMEWORK": {
+      "aliases": [
+        {
+          "id": "react",
+          "names": [
+            "react",
+            "reactjs"
+          ]
+        },
+        {
+          "id": "vue",
+          "names": [
+            "vue",
+            "vuejs"
+          ]
+        },
+        {
+          "id": "angular",
+          "names": [
+            "angular",
+            "ng"
+          ]
+        },
+        {
+          "id": "django",
+          "names": [
+            "django"
+          ]
+        },
+        {
+          "id": "spring",
+          "names": [
+            "spring",
+            "spring boot"
+          ]
+        },
+        {
+          "id": "rails",
+          "names": [
+            "rails",
+            "rubyonrails",
+            "ruby on rails"
+          ]
+        }
+      ]
     },
-    {
-      "pattern": "\\b(?:stupid|dumb|useless)\\s+(?:{TARGET_TOOL})\\b",
-      "category": "tooling_rage",
-      "severity": 2
+    "TARGET_LANG": {
+      "aliases": [
+        {
+          "id": "javascript",
+          "names": [
+            "javascript",
+            "js",
+            "node",
+            "nodejs"
+          ]
+        },
+        {
+          "id": "typescript",
+          "names": [
+            "typescript",
+            "ts"
+          ]
+        },
+        {
+          "id": "python",
+          "names": [
+            "python",
+            "py"
+          ]
+        },
+        {
+          "id": "go",
+          "names": [
+            "go",
+            "golang"
+          ]
+        },
+        {
+          "id": "rust",
+          "names": [
+            "rust"
+          ]
+        },
+        {
+          "id": "java",
+          "names": [
+            "java"
+          ]
+        },
+        {
+          "id": "ruby",
+          "names": [
+            "ruby",
+            "rb"
+          ]
+        },
+        {
+          "id": "php",
+          "names": [
+            "php"
+          ]
+        },
+        {
+          "id": "csharp",
+          "names": [
+            "c#",
+            "csharp",
+            "dotnet",
+            ".net"
+          ]
+        },
+        {
+          "id": "cpp",
+          "names": [
+            "c\\+\\+",
+            "cpp"
+          ]
+        }
+      ]
     },
+    "TARGET_TOOL": {
+      "aliases": [
+        {
+          "id": "eslint",
+          "names": [
+            "eslint",
+            "@eslint"
+          ]
+        },
+        {
+          "id": "prettier",
+          "names": [
+            "prettier"
+          ]
+        },
+        {
+          "id": "flake8",
+          "names": [
+            "flake8"
+          ]
+        },
+        {
+          "id": "black",
+          "names": [
+            "black (formatter)",
+            "black formatter"
+          ]
+        },
+        {
+          "id": "pylint",
+          "names": [
+            "pylint"
+          ]
+        },
+        {
+          "id": "mypy",
+          "names": [
+            "mypy"
+          ]
+        },
+        {
+          "id": "golangci_lint",
+          "names": [
+            "golangci-lint",
+            "golangci lint"
+          ]
+        },
+        {
+          "id": "tsc",
+          "names": [
+            "tsc",
+            "typescript compiler",
+            "typescript"
+          ]
+        },
+        {
+          "id": "jest",
+          "names": [
+            "jest"
+          ]
+        },
+        {
+          "id": "npm",
+          "names": [
+            "npm"
+          ]
+        },
+        {
+          "id": "pnpm",
+          "names": [
+            "pnpm"
+          ]
+        },
+        {
+          "id": "gradle",
+          "names": [
+            "gradle"
+          ]
+        },
+        {
+          "id": "maven",
+          "names": [
+            "maven",
+            "mvn"
+          ]
+        },
+        {
+          "id": "ci_generic",
+          "names": [
+            "ci",
+            "build",
+            "pipeline",
+            "runner"
+          ]
+        },
+        {
+          "id": "formatter",
+          "names": [
+            "formatter",
+            "code formatter"
+          ]
+        },
+        {
+          "id": "coverage",
+          "names": [
+            "coverage",
+            "lcov",
+            "cobertura"
+          ]
+        }
+      ]
+    }
+  },
+  "lemmas": [
     {
-      "pattern": "\\bthanks[, ]*(?:{TARGET_BOT}|{TARGET_TOOL})[, ]*(?:jerk|idiot)\\b",
-      "category": "tooling_rage",
-      "severity": 2
-    },
-
-    {
-      "pattern": "\\b(?:{TARGET_TOOL})\\s+(?:keeps|kept|is)\\s+(?:breaking|borked|trash|garbage)\\b",
-      "category": "tooling_rage",
-      "severity": 2
-    },
-    {
-      "pattern": "\\b(?:{TARGET_BOT})\\s+(?:is|was)\\s+(?:broken|trash|garbage)\\b",
-      "category": "bot_rage",
-      "severity": 2
-    },
-
-    {
-      "pattern": "\\b(?:i|we)\\s+(?:fucked|screwed|mess(?:ed)?)\\s+up\\b",
-      "category": "self_own",
-      "severity": 2
-    },
-    {
-      "pattern": "\\bthis\\s+(?:code|commit|pr|build)\\s+is\\s+(?:crap|trash|garbage)\\b",
+      "term": "apesta",
       "category": "generic",
       "severity": 1
     },
     {
-      "pattern": "\\bwtf(?:\\s+(?:{TARGET_TOOL}|{TARGET_BOT}))?\\b",
+      "term": "ass-backwards",
       "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "bagger",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "balls-up",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "basura",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "bollocks",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "bordel",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "borked",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "bullshit",
+      "category": "generic",
+      "severity": 1,
+      "variants": [
+        "repeat_collapse"
+      ]
+    },
+    {
+      "term": "clusterfuck",
+      "category": "generic",
+      "severity": 2,
+      "variants": [
+        "leet",
+        "gapped",
+        "repeat_collapse"
+      ]
+    },
+    {
+      "term": "crap",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "crapcode",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "crappy",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "dammit",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "damn",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "dogshit",
+      "category": "generic",
+      "severity": 2
+    },
+    {
+      "term": "droga",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "dumpster fire",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "dumpster-fire",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "fa schifo",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "ffs",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "freaking",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "frick",
+      "category": "generic",
+      "severity": 1,
+      "variants": [
+        "repeat_collapse"
+      ]
+    },
+    {
+      "term": "fubar",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "fuck",
+      "category": "generic",
+      "severity": 2,
+      "variants": [
+        "leet",
+        "gapped",
+        "repeat_collapse",
+        "confusables"
+      ]
+    },
+    {
+      "term": "fuck-up",
+      "category": "generic",
+      "severity": 2
+    },
+    {
+      "term": "fucked up",
+      "category": "generic",
+      "severity": 2,
+      "variants": [
+        "repeat_collapse"
+      ]
+    },
+    {
+      "term": "fuckery",
+      "category": "generic",
+      "severity": 2
+    },
+    {
+      "term": "fuckup",
+      "category": "generic",
+      "severity": 2,
+      "variants": [
+        "repeat_collapse"
+      ]
+    },
+    {
+      "term": "garbage",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "garbage fire",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "garbage-tier",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "goddamn",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "gtfo",
+      "category": "generic",
+      "severity": 1,
+      "variants": [
+        "leet"
+      ]
+    },
+    {
+      "term": "half-assed",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "hell",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "horseshit",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "janky",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "joder",
+      "category": "generic",
+      "severity": 2
+    },
+    {
+      "term": "junk",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "lixo",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "merda",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "merda",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "merde",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "mierda",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "mist",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "nul",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "piece of shit",
+      "category": "generic",
+      "severity": 2
+    },
+    {
+      "term": "piece-of-shit",
+      "category": "generic",
+      "severity": 2
+    },
+    {
+      "term": "piss",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "piss off",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "piss-poor",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "pissed",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "pissy",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "pourri",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "rotzooi",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "rubbish",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "scheisse",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "scheiße",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "schifo",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "schrott",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "shit",
+      "category": "generic",
+      "severity": 1,
+      "variants": [
+        "repeat_collapse"
+      ]
+    },
+    {
+      "term": "shit-tier",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "shitcode",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "shitshow",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "shitty",
+      "category": "generic",
+      "severity": 1,
+      "variants": [
+        "repeat_collapse"
+      ]
+    },
+    {
+      "term": "snafu",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "stfu",
+      "category": "generic",
+      "severity": 1,
+      "variants": [
+        "leet"
+      ]
+    },
+    {
+      "term": "sucks",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "trainwreck",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "trash",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "trash-tier",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "troep",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "wtf",
+      "category": "generic",
+      "severity": 1,
+      "variants": [
+        "leet",
+        "gapped",
+        "repeat_collapse"
+      ]
+    },
+    {
+      "term": "дерьмо",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "мусор",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "фигня",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "اللعنة",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "تبا",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "زبالة",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "くそ",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "クソ",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "ゴミ",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "쓰레기",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "엉망",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "젠장",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "arsehole",
+      "category": "harassment",
+      "severity": 2
+    },
+    {
+      "term": "asshat",
+      "category": "harassment",
+      "severity": 1
+    },
+    {
+      "term": "asshole",
+      "category": "harassment",
+      "severity": 2
+    },
+    {
+      "term": "asswipe",
+      "category": "harassment",
+      "severity": 2
+    },
+    {
+      "term": "bastard",
+      "category": "harassment",
+      "severity": 2
+    },
+    {
+      "term": "bastards",
+      "category": "harassment",
+      "severity": 2
+    },
+    {
+      "term": "brain-dead",
+      "category": "harassment",
+      "severity": 1
+    },
+    {
+      "term": "cunt",
+      "category": "harassment",
+      "severity": 3,
+      "variants": [
+        "leet",
+        "gapped"
+      ]
+    },
+    {
+      "term": "dick",
+      "category": "harassment",
+      "severity": 1
+    },
+    {
+      "term": "dickhead",
+      "category": "harassment",
+      "severity": 2
+    },
+    {
+      "term": "dipshit",
+      "category": "harassment",
+      "severity": 2
+    },
+    {
+      "term": "douche",
+      "category": "harassment",
+      "severity": 1
+    },
+    {
+      "term": "douchebag",
+      "category": "harassment",
+      "severity": 2
+    },
+    {
+      "term": "dumbass",
+      "category": "harassment",
+      "severity": 2
+    },
+    {
+      "term": "dumbfuck",
+      "category": "harassment",
+      "severity": 2
+    },
+    {
+      "term": "idiot",
+      "category": "harassment",
+      "severity": 1
+    },
+    {
+      "term": "imbecile",
+      "category": "harassment",
+      "severity": 1
+    },
+    {
+      "term": "jackass",
+      "category": "harassment",
+      "severity": 2
+    },
+    {
+      "term": "jerk",
+      "category": "harassment",
+      "severity": 1
+    },
+    {
+      "term": "moron",
+      "category": "harassment",
+      "severity": 1
+    },
+    {
+      "term": "motherfucker",
+      "category": "harassment",
+      "severity": 3,
+      "variants": [
+        "leet",
+        "repeat_collapse"
+      ]
+    },
+    {
+      "term": "numbnuts",
+      "category": "harassment",
+      "severity": 1
+    },
+    {
+      "term": "prick",
+      "category": "harassment",
+      "severity": 1
+    },
+    {
+      "term": "shithead",
+      "category": "harassment",
+      "severity": 2
+    },
+    {
+      "term": "smartass",
+      "category": "harassment",
+      "severity": 1
+    },
+    {
+      "term": "son of a bitch",
+      "category": "harassment",
+      "severity": 2
+    },
+    {
+      "term": "stupid",
+      "category": "harassment",
+      "severity": 1
+    },
+    {
+      "term": "tosser",
+      "category": "harassment",
+      "severity": 1
+    },
+    {
+      "term": "twat",
+      "category": "harassment",
+      "severity": 2
+    },
+    {
+      "term": "useless",
+      "category": "harassment",
+      "severity": 1
+    },
+    {
+      "term": "wanker",
+      "category": "harassment",
+      "severity": 1
+    },
+    {
+      "term": "botched",
+      "category": "self_own",
+      "severity": 1
+    },
+    {
+      "term": "hosed",
+      "category": "self_own",
+      "severity": 1
+    },
+    {
+      "term": "i blew it",
+      "category": "self_own",
+      "severity": 1
+    },
+    {
+      "term": "i messed up",
+      "category": "self_own",
+      "severity": 1
+    },
+    {
+      "term": "i screwed up",
+      "category": "self_own",
+      "severity": 1
+    },
+    {
+      "term": "my bad",
+      "category": "self_own",
+      "severity": 1
+    },
+    {
+      "term": "oops",
+      "category": "self_own",
+      "severity": 1
+    },
+    {
+      "term": "we messed up",
+      "category": "self_own",
+      "severity": 1
+    },
+    {
+      "term": "we screwed up",
+      "category": "self_own",
+      "severity": 1
+    },
+    {
+      "term": "cassé",
+      "category": "tooling_rage",
+      "severity": 1
+    },
+    {
+      "term": "kapot",
+      "category": "tooling_rage",
+      "severity": 1
+    },
+    {
+      "term": "kaputt",
+      "category": "tooling_rage",
+      "severity": 1
+    },
+    {
+      "term": "quebrado",
+      "category": "tooling_rage",
+      "severity": 1
+    },
+    {
+      "term": "roto",
+      "category": "tooling_rage",
+      "severity": 1
+    },
+    {
+      "term": "rotto",
+      "category": "tooling_rage",
+      "severity": 1
+    },
+    {
+      "term": "сломано",
+      "category": "tooling_rage",
+      "severity": 1
+    },
+    {
+      "term": "خربان",
+      "category": "tooling_rage",
+      "severity": 1
+    },
+    {
+      "term": "壊れてる",
+      "category": "tooling_rage",
+      "severity": 1
+    },
+    {
+      "term": "고장났어",
+      "category": "tooling_rage",
       "severity": 1
     }
   ],
-
-  "slots": {
-    "TARGET_BOT": [
-      "dependabot",
-      "renovate",
-      "mergify",
-      "greenkeeper",
-      "codecov",
-      "codeql",
-      "stryker",
-      "trivy",
-      "semantic-release",
-      "snyk",
-      "github actions",
-      "oss-fuzz"
-    ],
-    "TARGET_TOOL": [
-      "linter",
-      "eslint",
-      "prettier",
-      "flake8",
-      "black",
-      "pylint",
-      "isort",
-      "mypy",
-      "golangci-lint",
-      "rustfmt",
-      "cargo",
-      "tsc",
-      "typescript",
-      "webpack",
-      "vite",
-      "jest",
-      "mocha",
-      "karma",
-      "vitest",
-      "pytest",
-      "nose",
-      "junit",
-      "npm",
-      "yarn",
-      "pnpm",
-      "pip",
-      "poetry",
-      "pipenv",
-      "gradle",
-      "maven",
-      "sbt",
-      "bazel",
-      "cmake",
-      "make",
-      "ci",
-      "build",
-      "tests",
-      "formatter",
-      "coverage"
-    ]
-  },
-
-  "lemmas": [
-    { "term": "fuck", "category": "generic", "severity": 2 },
-    { "term": "shit", "category": "generic", "severity": 1 },
-    { "term": "bullshit", "category": "generic", "severity": 1 },
-    { "term": "wtf", "category": "generic", "severity": 1 },
-    { "term": "ffs", "category": "generic", "severity": 1 },
-    { "term": "damn", "category": "generic", "severity": 1 },
-    { "term": "dammit", "category": "generic", "severity": 1 },
-    { "term": "crap", "category": "generic", "severity": 1 },
-    { "term": "garbage", "category": "generic", "severity": 1 },
-    { "term": "trash", "category": "generic", "severity": 1 },
-    { "term": "bitch", "category": "harassment", "severity": 2 },
-    { "term": "asshole", "category": "harassment", "severity": 2 },
-    { "term": "dumbass", "category": "harassment", "severity": 2 },
-    { "term": "jerk", "category": "harassment", "severity": 1 },
-    { "term": "idiot", "category": "harassment", "severity": 1 },
-
-    { "term": "screwup", "category": "self_own", "severity": 1 },
-    { "term": "borked", "category": "tooling_rage", "severity": 1 },
-    { "term": "broken", "category": "tooling_rage", "severity": 1 },
-    { "term": "useless", "category": "tooling_rage", "severity": 1 }
+  "templates": [
+    {
+      "id": "ar.bot_rage.core",
+      "pattern": "(?:{TARGET_BOT})\\s+(?:سيء|قمامة|معطل)",
+      "category": "bot_rage",
+      "severity": 2
+    },
+    {
+      "id": "ar.generic.core",
+      "pattern": "\\bwtf\\b",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "id": "ar.lang_rage.core",
+      "pattern": "(?:{TARGET_LANG})\\s+(?:سيء|قمامة|فظيع)",
+      "category": "lang_rage",
+      "severity": 2
+    },
+    {
+      "id": "ar.tool_rage.core",
+      "pattern": "(?:{TARGET_TOOL})\\s+(?:سيء|قمامة|معطل|خربان)",
+      "category": "tooling_rage",
+      "severity": 2
+    },
+    {
+      "id": "de.bot_rage.core",
+      "pattern": "\\b(?:{TARGET_BOT})\\s+ist\\s+(?:m[üu]ll|schrott|kaputt)",
+      "category": "bot_rage",
+      "severity": 2
+    },
+    {
+      "id": "de.generic.core",
+      "pattern": "\\bwtf\\b",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "id": "de.lang_rage.core",
+      "pattern": "\\b(?:{TARGET_LANG})\\s+ist\\s+(?:m[üu]ll|schrott|schei(?:sse|ße)|schlecht)",
+      "category": "lang_rage",
+      "severity": 2
+    },
+    {
+      "id": "de.tool_rage.core",
+      "pattern": "\\b(?:{TARGET_TOOL})\\s+ist\\s+(?:m[üu]ll|schrott|kaputt)",
+      "category": "tooling_rage",
+      "severity": 2
+    },
+    {
+      "id": "en.bot_rage.fu_you_bot",
+      "pattern": "\\bfuck\\s+you[\\s,]+(?:{TARGET_BOT})\\b",
+      "category": "bot_rage",
+      "severity": 3,
+      "variants": [
+        "leet",
+        "gapped",
+        "repeat_collapse",
+        "confusables"
+      ],
+      "context_signals": {
+        "disallow_in_code": true,
+        "requires_direct_address": true
+      }
+    },
+    {
+      "id": "en.bot_rage.should_die",
+      "pattern": "\\b(?:{TARGET_BOT})\\s+(?:can|should|must)\\s+(?:die|fuck\\s*off|go\\s*away|kill\\s*itself)\\b",
+      "category": "bot_rage",
+      "severity": 3,
+      "variants": [
+        "leet",
+        "gapped",
+        "confusables",
+        "repeat_collapse"
+      ],
+      "context_signals": {
+        "boost_if_mention": true
+      }
+    },
+    {
+      "id": "en.bot_rage.stupid_bot",
+      "pattern": "\\b(?:stupid|dumb|useless|braindead|worthless)\\s+(?:{TARGET_BOT})\\b",
+      "category": "bot_rage",
+      "severity": 2,
+      "variants": [
+        "repeat_collapse",
+        "confusables"
+      ]
+    },
+    {
+      "id": "en.generic.wtf_target",
+      "pattern": "\\bwtf(?:\\s+(?:{TARGET_TOOL}|{TARGET_BOT}))?\\b",
+      "category": "generic",
+      "severity": 1,
+      "variants": [
+        "leet",
+        "gapped",
+        "repeat_collapse",
+        "confusables"
+      ]
+    },
+    {
+      "id": "en.lang_rage.lang_is_profanity",
+      "pattern": "\\b(?:{TARGET_LANG}|{TARGET_FRAMEWORK})\\s+is\\s+(?:trash|garbage|shit|crap|awful|stupid|useless|dogshit|terrible|broken|garbage\\s*tier|trash\\s*tier|a\\s*dumpster\\s*fire|a\\s*trainwreck|fuck\\w+)\\b",
+      "category": "lang_rage",
+      "severity": 2,
+      "variants": [
+        "leet",
+        "repeat_collapse",
+        "confusables"
+      ],
+      "context_signals": {
+        "disallow_in_code": true
+      }
+    },
+    {
+      "id": "en.lang_rage.lang_verbs",
+      "pattern": "\\b(?:{TARGET_LANG}|{TARGET_FRAMEWORK})\\s+(?:sucks|blows|is\\s*garbage|is\\s*trash)\\b",
+      "category": "lang_rage",
+      "severity": 2,
+      "variants": [
+        "repeat_collapse",
+        "confusables"
+      ]
+    },
+    {
+      "id": "en.tool_rage.fu_you_tool",
+      "pattern": "\\bfuck\\s+you[\\s,]+(?:{TARGET_TOOL})\\b",
+      "category": "tooling_rage",
+      "severity": 3,
+      "variants": [
+        "leet",
+        "gapped",
+        "repeat_collapse",
+        "confusables"
+      ],
+      "context_signals": {
+        "disallow_in_code": true,
+        "requires_direct_address": true
+      }
+    },
+    {
+      "id": "en.tool_rage.keeps_breaking",
+      "pattern": "\\b(?:{TARGET_TOOL})\\s+(?:keeps|kept|is|was|continues\\s*to)\\s+(?:fail|failing|break(?:ing)?|borked|trash|garbage|useless|flaky)\\b",
+      "category": "tooling_rage",
+      "severity": 2,
+      "variants": [
+        "repeat_collapse",
+        "confusables"
+      ]
+    },
+    {
+      "id": "es.bot_rage.basura",
+      "pattern": "\\b(?:{TARGET_BOT})\\s+es\\s+(?:basura|una\\s+mierda|porquer[ií]a)",
+      "category": "bot_rage",
+      "severity": 2
+    },
+    {
+      "id": "es.generic.core",
+      "pattern": "\\bwtf\\b",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "id": "es.lang_rage.core",
+      "pattern": "\\b(?:{TARGET_LANG})\\s+es\\s+(?:una\\s+mierda|basura|horrible|p[eé]simo)",
+      "category": "lang_rage",
+      "severity": 2
+    },
+    {
+      "id": "es.tool_rage.core",
+      "pattern": "\\b(?:{TARGET_TOOL})\\s+es\\s+(?:basura|una\\s+mierda|porquer[ií]a)",
+      "category": "tooling_rage",
+      "severity": 2
+    },
+    {
+      "id": "fr.bot_rage.core",
+      "pattern": "\\b(?:{TARGET_BOT})\\s+est\\s+(?:pourri|nul|de\\s+la\\s+merde)",
+      "category": "bot_rage",
+      "severity": 2
+    },
+    {
+      "id": "fr.generic.core",
+      "pattern": "\\b(?:wtf|bordel)\\b",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "id": "fr.lang_rage.core",
+      "pattern": "\\b(?:{TARGET_LANG})\\s+est\\s+(?:nul|pourri|de\\s+la\\s+merde|horrible)",
+      "category": "lang_rage",
+      "severity": 2
+    },
+    {
+      "id": "fr.tool_rage.core",
+      "pattern": "\\b(?:{TARGET_TOOL})\\s+est\\s+(?:pourri|nul|cass[ée])",
+      "category": "tooling_rage",
+      "severity": 2
+    },
+    {
+      "id": "it.bot_rage.core",
+      "pattern": "\\b(?:{TARGET_BOT})\\s+fa\\s+schifo",
+      "category": "bot_rage",
+      "severity": 2
+    },
+    {
+      "id": "it.generic.core",
+      "pattern": "\\bwtf\\b",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "id": "it.lang_rage.core",
+      "pattern": "\\b(?:{TARGET_LANG})\\s+(?:fa\\s+schifo|[eè]\\s+una\\s+schifezza|p[eé]ssimo)",
+      "category": "lang_rage",
+      "severity": 2
+    },
+    {
+      "id": "it.tool_rage.core",
+      "pattern": "\\b(?:{TARGET_TOOL})\\s+(?:[eè]\\s+rotto|fa\\s+schifo)",
+      "category": "tooling_rage",
+      "severity": 2
+    },
+    {
+      "id": "ja.bot_rage.core",
+      "pattern": "(?:{TARGET_BOT}).*?(?:ゴミ|クソ|使えない)",
+      "category": "bot_rage",
+      "severity": 2
+    },
+    {
+      "id": "ja.generic.core",
+      "pattern": "(何これ|なんだこれ)",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "id": "ja.lang_rage.core",
+      "pattern": "(?:{TARGET_LANG}).*?(?:ゴミ|最悪|クソ|だめ)",
+      "category": "lang_rage",
+      "severity": 2
+    },
+    {
+      "id": "ja.tool_rage.core",
+      "pattern": "(?:{TARGET_TOOL}).*?(?:壊れてる|ゴミ|使えない)",
+      "category": "tooling_rage",
+      "severity": 2
+    },
+    {
+      "id": "ko.bot_rage.core",
+      "pattern": "(?:{TARGET_BOT}).*?(?:쓰레기|엉망|고장)",
+      "category": "bot_rage",
+      "severity": 2
+    },
+    {
+      "id": "ko.generic.core",
+      "pattern": "\\bwtf\\b",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "id": "ko.lang_rage.core",
+      "pattern": "(?:{TARGET_LANG}).*?(?:쓰레기|최악|엉망)",
+      "category": "lang_rage",
+      "severity": 2
+    },
+    {
+      "id": "ko.tool_rage.core",
+      "pattern": "(?:{TARGET_TOOL}).*?(?:쓰레기|엉망|망가졌|고장났)",
+      "category": "tooling_rage",
+      "severity": 2
+    },
+    {
+      "id": "nl.bot_rage.core",
+      "pattern": "\\b(?:{TARGET_BOT})\\s+is\\s+(?:rotzooi|troep|bagger|kapot)",
+      "category": "bot_rage",
+      "severity": 2
+    },
+    {
+      "id": "nl.generic.core",
+      "pattern": "\\bwtf\\b",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "id": "nl.lang_rage.core",
+      "pattern": "\\b(?:{TARGET_LANG})\\s+is\\s+(?:rotzooi|troep|bagger|waardeloos)",
+      "category": "lang_rage",
+      "severity": 2
+    },
+    {
+      "id": "nl.tool_rage.core",
+      "pattern": "\\b(?:{TARGET_TOOL})\\s+is\\s+(?:kapot|rotzooi|troep|waardeloos)",
+      "category": "tooling_rage",
+      "severity": 2
+    },
+    {
+      "id": "pt.bot_rage.core",
+      "pattern": "\\b(?:{TARGET_BOT})\\s+é\\s+(?:lixo|uma\\s+merda|horr[ií]vel)",
+      "category": "bot_rage",
+      "severity": 2
+    },
+    {
+      "id": "pt.generic.core",
+      "pattern": "\\bwtf\\b",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "id": "pt.lang_rage.core",
+      "pattern": "\\b(?:{TARGET_LANG})\\s+é\\s+(?:lixo|uma\\s+merda|p[eé]ssimo)",
+      "category": "lang_rage",
+      "severity": 2
+    },
+    {
+      "id": "pt.tool_rage.core",
+      "pattern": "\\b(?:{TARGET_TOOL})\\s+est[aá]\\s+quebrado",
+      "category": "tooling_rage",
+      "severity": 2
+    },
+    {
+      "id": "ru.bot_rage.core",
+      "pattern": "\\b(?:{TARGET_BOT})\\s+(?:дерьмо|мусор|сломан)",
+      "category": "bot_rage",
+      "severity": 2
+    },
+    {
+      "id": "ru.generic.core",
+      "pattern": "\\bwtf\\b",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "id": "ru.lang_rage.core",
+      "pattern": "\\b(?:{TARGET_LANG})\\s+(?:дерьмо|фигня|ужасн(?:о|ый))",
+      "category": "lang_rage",
+      "severity": 2
+    },
+    {
+      "id": "ru.tool_rage.core",
+      "pattern": "\\b(?:{TARGET_TOOL})\\s+(?:дерьмо|мусор|сломан[оа]?|сломался)",
+      "category": "tooling_rage",
+      "severity": 2
+    }
   ],
-
-  "stoplist": [
-    "assistant",
-    "assess",
-    "assessment",
-    "assessor",
-    "assimilate",
-    "associate",
-    "association",
-    "passage",
-    "passive",
-    "compass",
-    "compassion",
-    "password",
-    "surpass",
-    "class",
-    "classic",
-    "classify",
-    "classification",
-    "declassify",
-    "assign",
-    "assignment",
-    "reassignment",
-    "scunthorpe",
-    "shiitake",
-    "shiitake mushroom",
-    "shihtzu",
-    "shih tzu",
-    "bitchute",
-    "passing",
-    "passcode",
-    "passenger",
-    "grasshopper",
-    "morass",
-    "sass",
-    "sassc",
-    "javascript",
-    "typescript"
+  "allowlist": {
+    "global": [
+      "assistant",
+      "assess",
+      "assessment",
+      "assessor",
+      "assimilate",
+      "associate",
+      "association",
+      "passage",
+      "passive",
+      "compass",
+      "compassion",
+      "password",
+      "surpass",
+      "class",
+      "classic",
+      "classify",
+      "classification",
+      "declassify",
+      "assign",
+      "assignment",
+      "reassignment",
+      "scunthorpe",
+      "shiitake",
+      "shiitake mushroom",
+      "shihtzu",
+      "shih tzu",
+      "bitchute",
+      "passing",
+      "passcode",
+      "passenger",
+      "grasshopper",
+      "morass",
+      "sass",
+      "sassc",
+      "javascript",
+      "typescript"
+    ],
+    "by_zone": {
+      "code": [
+        "class",
+        "pass",
+        "assert",
+        "password",
+        "assign",
+        "assignment",
+        "sass",
+        "sassc",
+        "typescript",
+        "javascript",
+        "passcode",
+        "classname",
+        "class",
+        "pass",
+        "assert",
+        "password",
+        "assign",
+        "assignment",
+        "sass",
+        "sassc",
+        "typescript",
+        "javascript",
+        "passcode",
+        "classname"
+      ],
+      "identifier": [
+        "class",
+        "pass",
+        "passwd",
+        "assert",
+        "process_pass",
+        "passkey",
+        "typescript",
+        "javascript"
+      ],
+      "url": [
+        "pass",
+        "sass",
+        "class",
+        "typescript",
+        "javascript"
+      ]
+    }
+  },
+  "engine_hints": {
+    "lang_routing": {
+      "fallback": [
+        "en"
+      ],
+      "min_confidence": 0.6
+    },
+    "normalization": {
+      "casefold": true,
+      "collapse_repeats_threshold": 3,
+      "collapse_whitespace": true,
+      "confusables_map": "default",
+      "nfkc": true,
+      "strip_variation_selectors": true
+    },
+    "search": {
+      "gapped_max_gap": 3,
+      "max_context_window": 80,
+      "scan_shadow_strings": [
+        "leet",
+        "confusables"
+      ],
+      "use_aho_corasick_for_lemmas": true,
+      "use_script_boundaries": true,
+      "word_boundary_strategy": "unicode_grapheme_or_script"
+    }
+  },
+  "severity_mods": [
+    {
+      "cap": 3,
+      "delta": 1,
+      "id": "boost.direct_address",
+      "if": {
+        "direct_address": true
+      }
+    },
+    {
+      "cap": 3,
+      "delta": 1,
+      "id": "boost.mention_target",
+      "if": {
+        "has_mention": true
+      }
+    },
+    {
+      "cap": 3,
+      "delta": 1,
+      "id": "boost.repetition",
+      "if": {
+        "repeated_token": true
+      }
+    },
+    {
+      "delta": -1,
+      "floor": 0,
+      "id": "reduce.in_code",
+      "if": {
+        "zone": "code"
+      }
+    },
+    {
+      "delta": -1,
+      "floor": 0,
+      "id": "reduce.in_identifier",
+      "if": {
+        "zone": "identifier"
+      }
+    },
+    {
+      "delta": -1,
+      "floor": 0,
+      "id": "reduce.quote",
+      "if": {
+        "zone": "quote"
+      }
+    }
   ]
 }
