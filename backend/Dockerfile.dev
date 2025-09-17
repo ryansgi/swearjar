@@ -1,6 +1,21 @@
 FROM golang:1.25-bookworm
 
-RUN go install github.com/air-verse/air@latest && mv /go/bin/air /usr/local/bin/air
-RUN go install github.com/swaggo/swag/v2/cmd/swag@latest
+ARG APP_UID=1000
+ARG APP_GID=1000
+
+RUN go install github.com/air-verse/air@latest && mv /go/bin/air /usr/local/bin/air && \
+    go install github.com/swaggo/swag/v2/cmd/swag@latest && mv /go/bin/swag /usr/local/bin/swag
+
+RUN groupadd -g ${APP_GID} app && useradd -m -u ${APP_UID} -g ${APP_GID} -s /bin/bash app && \
+    mkdir -p /app/backend /app/rules \
+             /home/app/go/pkg/mod \
+             /home/app/.cache/go-build && \
+    chown -R app:app /app /home/app
+
+ENV HOME=/home/app \
+    GOMODCACHE=/home/app/go/pkg/mod \
+    GOCACHE=/home/app/.cache/go-build \
+    XDG_CACHE_HOME=/home/app/.cache
 
 WORKDIR /app/backend
+USER app

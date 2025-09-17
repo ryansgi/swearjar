@@ -38,5 +38,9 @@ backend/bin
 backend/tmp
 backend/internal/services/api/docs
 
-# temporary internal docs
+# Temporary internal docs
 /_notes
+
+# Frontend
+/frontend/web/node_modules/*
+/frontend/web/.next
