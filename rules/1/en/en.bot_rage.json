@@ -1,0 +1,46 @@
+{
+  "language": "en",
+  "templates": [
+    {
+      "id": "en.bot_rage.fu_you_bot",
+      "pattern": "\\bfuck\\s+you[\\s,]+(?:{TARGET_BOT})\\b",
+      "category": "bot_rage",
+      "severity": 3,
+      "variants": [
+        "leet",
+        "gapped",
+        "repeat_collapse",
+        "confusables"
+      ],
+      "context_signals": {
+        "requires_direct_address": true,
+        "disallow_in_code": true
+      }
+    },
+    {
+      "id": "en.bot_rage.should_die",
+      "pattern": "\\b(?:{TARGET_BOT})\\s+(?:can|should|must)\\s+(?:die|fuck\\s*off|go\\s*away|kill\\s*itself)\\b",
+      "category": "bot_rage",
+      "severity": 3,
+      "variants": [
+        "leet",
+        "gapped",
+        "confusables",
+        "repeat_collapse"
+      ],
+      "context_signals": {
+        "boost_if_mention": true
+      }
+    },
+    {
+      "id": "en.bot_rage.stupid_bot",
+      "pattern": "\\b(?:stupid|dumb|useless|braindead|worthless)\\s+(?:{TARGET_BOT})\\b",
+      "category": "bot_rage",
+      "severity": 2,
+      "variants": [
+        "repeat_collapse",
+        "confusables"
+      ]
+    }
+  ]
+}

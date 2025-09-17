@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Rulepack Core",
+  "type": "object",
+  "required": [
+    "version",
+    "meta",
+    "categories",
+    "variants_spec",
+    "zones",
+    "slots",
+    "allowlist",
+    "engine_hints",
+    "severity_mods"
+  ],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "enum": [
+        2
+      ]
+    },
+    "meta": {
+      "type": "object"
+    },
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "variants_spec": {
+      "type": "object"
+    },
+    "zones": {
+      "type": "object"
+    },
+    "slots": {
+      "type": "object"
+    },
+    "allowlist": {
+      "type": "object"
+    },
+    "engine_hints": {
+      "type": "object"
+    },
+    "severity_mods": {
+      "type": "array"
+    }
+  },
+  "additionalProperties": false
+}

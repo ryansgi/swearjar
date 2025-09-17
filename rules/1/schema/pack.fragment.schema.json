@@ -1,0 +1,100 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Rulepack Language Fragment",
+  "type": "object",
+  "required": [
+    "language"
+  ],
+  "properties": {
+    "language": {
+      "type": "string",
+      "minLength": 2
+    },
+    "lemmas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "term",
+          "category",
+          "severity"
+        ],
+        "properties": {
+          "term": {
+            "type": "string",
+            "minLength": 1
+          },
+          "category": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "variants": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "context_signals": {
+            "type": "object"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "templates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "pattern",
+          "category",
+          "severity"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "pattern": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "variants": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "context_signals": {
+            "type": "object"
+          },
+          "examples": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "allowlist": {
+      "type": "object"
+    },
+    "engine_hints": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}

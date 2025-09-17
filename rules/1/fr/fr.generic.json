@@ -1,0 +1,11 @@
+{
+  "language": "fr",
+  "templates": [
+    {
+      "id": "fr.generic.core",
+      "pattern": "\\b(?:wtf|bordel)\\b",
+      "category": "generic",
+      "severity": 1
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "language": "nl",
+  "templates": [
+    {
+      "id": "nl.lang_rage.core",
+      "pattern": "\\b(?:{TARGET_LANG})\\s+is\\s+(?:rotzooi|troep|bagger|waardeloos)",
+      "category": "lang_rage",
+      "severity": 2
+    }
+  ]
+}

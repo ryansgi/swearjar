@@ -1,0 +1,21 @@
+{
+  "language": "en",
+  "allowlist": {
+    "by_zone": {
+      "code": [
+        "class",
+        "pass",
+        "assert",
+        "password",
+        "assign",
+        "assignment",
+        "sass",
+        "sassc",
+        "typescript",
+        "javascript",
+        "passcode",
+        "classname"
+      ]
+    }
+  }
+}

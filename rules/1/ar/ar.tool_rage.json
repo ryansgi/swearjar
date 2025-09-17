@@ -1,0 +1,11 @@
+{
+  "language": "ar",
+  "templates": [
+    {
+      "id": "ar.tool_rage.core",
+      "pattern": "(?:{TARGET_TOOL})\\s+(?:سيء|قمامة|معطل|خربان)",
+      "category": "tooling_rage",
+      "severity": 2
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "language": "ar",
+  "templates": [
+    {
+      "id": "ar.bot_rage.core",
+      "pattern": "(?:{TARGET_BOT})\\s+(?:سيء|قمامة|معطل)",
+      "category": "bot_rage",
+      "severity": 2
+    }
+  ]
+}

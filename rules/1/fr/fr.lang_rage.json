@@ -1,0 +1,11 @@
+{
+  "language": "fr",
+  "templates": [
+    {
+      "id": "fr.lang_rage.core",
+      "pattern": "\\b(?:{TARGET_LANG})\\s+est\\s+(?:nul|pourri|de\\s+la\\s+merde|horrible)",
+      "category": "lang_rage",
+      "severity": 2
+    }
+  ]
+}

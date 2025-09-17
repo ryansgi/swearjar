@@ -1,0 +1,25 @@
+{
+  "language": "ko",
+  "lemmas": [
+    {
+      "term": "젠장",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "쓰레기",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "엉망",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "고장났어",
+      "category": "tooling_rage",
+      "severity": 1
+    }
+  ]
+}

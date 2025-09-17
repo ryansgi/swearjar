@@ -1,0 +1,11 @@
+{
+  "language": "ko",
+  "templates": [
+    {
+      "id": "ko.generic.core",
+      "pattern": "\\bwtf\\b",
+      "category": "generic",
+      "severity": 1
+    }
+  ]
+}

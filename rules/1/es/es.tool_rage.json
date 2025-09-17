@@ -1,0 +1,11 @@
+{
+  "language": "es",
+  "templates": [
+    {
+      "id": "es.tool_rage.core",
+      "pattern": "\\b(?:{TARGET_TOOL})\\s+es\\s+(?:basura|una\\s+mierda|porquer[ií]a)",
+      "category": "tooling_rage",
+      "severity": 2
+    }
+  ]
+}

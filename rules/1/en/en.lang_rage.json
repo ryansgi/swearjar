@@ -1,0 +1,29 @@
+{
+  "language": "en",
+  "templates": [
+    {
+      "id": "en.lang_rage.lang_is_profanity",
+      "pattern": "\\b(?:{TARGET_LANG}|{TARGET_FRAMEWORK})\\s+is\\s+(?:trash|garbage|shit|crap|awful|stupid|useless|dogshit|terrible|broken|garbage\\s*tier|trash\\s*tier|a\\s*dumpster\\s*fire|a\\s*trainwreck|fuck\\w+)\\b",
+      "category": "lang_rage",
+      "severity": 2,
+      "variants": [
+        "leet",
+        "repeat_collapse",
+        "confusables"
+      ],
+      "context_signals": {
+        "disallow_in_code": true
+      }
+    },
+    {
+      "id": "en.lang_rage.lang_verbs",
+      "pattern": "\\b(?:{TARGET_LANG}|{TARGET_FRAMEWORK})\\s+(?:sucks|blows|is\\s*garbage|is\\s*trash)\\b",
+      "category": "lang_rage",
+      "severity": 2,
+      "variants": [
+        "repeat_collapse",
+        "confusables"
+      ]
+    }
+  ]
+}

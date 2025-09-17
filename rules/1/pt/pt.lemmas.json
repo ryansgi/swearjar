@@ -1,0 +1,25 @@
+{
+  "language": "pt",
+  "lemmas": [
+    {
+      "term": "merda",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "droga",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "lixo",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "quebrado",
+      "category": "tooling_rage",
+      "severity": 1
+    }
+  ]
+}

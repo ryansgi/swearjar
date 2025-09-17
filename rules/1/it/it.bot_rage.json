@@ -1,0 +1,11 @@
+{
+  "language": "it",
+  "templates": [
+    {
+      "id": "it.bot_rage.core",
+      "pattern": "\\b(?:{TARGET_BOT})\\s+fa\\s+schifo",
+      "category": "bot_rage",
+      "severity": 2
+    }
+  ]
+}

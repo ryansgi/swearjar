@@ -1,0 +1,11 @@
+{
+  "language": "de",
+  "templates": [
+    {
+      "id": "de.bot_rage.core",
+      "pattern": "\\b(?:{TARGET_BOT})\\s+ist\\s+(?:m[üu]ll|schrott|kaputt)",
+      "category": "bot_rage",
+      "severity": 2
+    }
+  ]
+}

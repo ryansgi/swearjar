@@ -1,0 +1,11 @@
+{
+  "language": "nl",
+  "templates": [
+    {
+      "id": "nl.tool_rage.core",
+      "pattern": "\\b(?:{TARGET_TOOL})\\s+is\\s+(?:kapot|rotzooi|troep|waardeloos)",
+      "category": "tooling_rage",
+      "severity": 2
+    }
+  ]
+}

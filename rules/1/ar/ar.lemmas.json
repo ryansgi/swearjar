@@ -1,0 +1,25 @@
+{
+  "language": "ar",
+  "lemmas": [
+    {
+      "term": "تبا",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "اللعنة",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "زبالة",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "خربان",
+      "category": "tooling_rage",
+      "severity": 1
+    }
+  ]
+}

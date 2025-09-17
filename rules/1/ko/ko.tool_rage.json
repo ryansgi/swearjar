@@ -1,0 +1,11 @@
+{
+  "language": "ko",
+  "templates": [
+    {
+      "id": "ko.tool_rage.core",
+      "pattern": "(?:{TARGET_TOOL}).*?(?:쓰레기|엉망|망가졌|고장났)",
+      "category": "tooling_rage",
+      "severity": 2
+    }
+  ]
+}

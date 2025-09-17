@@ -1,0 +1,11 @@
+{
+  "language": "de",
+  "templates": [
+    {
+      "id": "de.tool_rage.core",
+      "pattern": "\\b(?:{TARGET_TOOL})\\s+ist\\s+(?:m[üu]ll|schrott|kaputt)",
+      "category": "tooling_rage",
+      "severity": 2
+    }
+  ]
+}

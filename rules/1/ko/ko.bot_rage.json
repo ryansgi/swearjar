@@ -1,0 +1,11 @@
+{
+  "language": "ko",
+  "templates": [
+    {
+      "id": "ko.bot_rage.core",
+      "pattern": "(?:{TARGET_BOT}).*?(?:쓰레기|엉망|고장)",
+      "category": "bot_rage",
+      "severity": 2
+    }
+  ]
+}

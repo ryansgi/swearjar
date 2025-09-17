@@ -1,0 +1,11 @@
+{
+  "language": "ru",
+  "templates": [
+    {
+      "id": "ru.lang_rage.core",
+      "pattern": "\\b(?:{TARGET_LANG})\\s+(?:дерьмо|фигня|ужасн(?:о|ый))",
+      "category": "lang_rage",
+      "severity": 2
+    }
+  ]
+}

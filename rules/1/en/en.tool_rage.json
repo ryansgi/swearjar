@@ -1,0 +1,31 @@
+{
+  "language": "en",
+  "templates": [
+    {
+      "id": "en.tool_rage.fu_you_tool",
+      "pattern": "\\bfuck\\s+you[\\s,]+(?:{TARGET_TOOL})\\b",
+      "category": "tooling_rage",
+      "severity": 3,
+      "variants": [
+        "leet",
+        "gapped",
+        "repeat_collapse",
+        "confusables"
+      ],
+      "context_signals": {
+        "requires_direct_address": true,
+        "disallow_in_code": true
+      }
+    },
+    {
+      "id": "en.tool_rage.keeps_breaking",
+      "pattern": "\\b(?:{TARGET_TOOL})\\s+(?:keeps|kept|is|was|continues\\s*to)\\s+(?:fail|failing|break(?:ing)?|borked|trash|garbage|useless|flaky)\\b",
+      "category": "tooling_rage",
+      "severity": 2,
+      "variants": [
+        "repeat_collapse",
+        "confusables"
+      ]
+    }
+  ]
+}

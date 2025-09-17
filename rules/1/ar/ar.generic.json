@@ -1,0 +1,11 @@
+{
+  "language": "ar",
+  "templates": [
+    {
+      "id": "ar.generic.core",
+      "pattern": "\\bwtf\\b",
+      "category": "generic",
+      "severity": 1
+    }
+  ]
+}

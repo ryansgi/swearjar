@@ -1,0 +1,17 @@
+{
+  "language": "en",
+  "templates": [
+    {
+      "id": "en.generic.wtf_target",
+      "pattern": "\\bwtf(?:\\s+(?:{TARGET_TOOL}|{TARGET_BOT}))?\\b",
+      "category": "generic",
+      "severity": 1,
+      "variants": [
+        "leet",
+        "gapped",
+        "repeat_collapse",
+        "confusables"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "language": "it",
+  "lemmas": [
+    {
+      "term": "merda",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "schifo",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "fa schifo",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "rotto",
+      "category": "tooling_rage",
+      "severity": 1
+    }
+  ]
+}

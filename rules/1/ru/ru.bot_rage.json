@@ -1,0 +1,11 @@
+{
+  "language": "ru",
+  "templates": [
+    {
+      "id": "ru.bot_rage.core",
+      "pattern": "\\b(?:{TARGET_BOT})\\s+(?:дерьмо|мусор|сломан)",
+      "category": "bot_rage",
+      "severity": 2
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "language": "nl",
+  "lemmas": [
+    {
+      "term": "rotzooi",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "troep",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "bagger",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "kapot",
+      "category": "tooling_rage",
+      "severity": 1
+    }
+  ]
+}

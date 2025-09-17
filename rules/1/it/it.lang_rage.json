@@ -1,0 +1,11 @@
+{
+  "language": "it",
+  "templates": [
+    {
+      "id": "it.lang_rage.core",
+      "pattern": "\\b(?:{TARGET_LANG})\\s+(?:fa\\s+schifo|[eè]\\s+una\\s+schifezza|p[eé]ssimo)",
+      "category": "lang_rage",
+      "severity": 2
+    }
+  ]
+}

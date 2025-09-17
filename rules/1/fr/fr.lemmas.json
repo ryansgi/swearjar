@@ -1,0 +1,30 @@
+{
+  "language": "fr",
+  "lemmas": [
+    {
+      "term": "merde",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "bordel",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "nul",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "pourri",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "cassé",
+      "category": "tooling_rage",
+      "severity": 1
+    }
+  ]
+}

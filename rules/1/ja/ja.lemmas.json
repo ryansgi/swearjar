@@ -1,0 +1,25 @@
+{
+  "language": "ja",
+  "lemmas": [
+    {
+      "term": "クソ",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "くそ",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "ゴミ",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "壊れてる",
+      "category": "tooling_rage",
+      "severity": 1
+    }
+  ]
+}

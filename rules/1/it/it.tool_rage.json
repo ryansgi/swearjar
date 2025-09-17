@@ -1,0 +1,11 @@
+{
+  "language": "it",
+  "templates": [
+    {
+      "id": "it.tool_rage.core",
+      "pattern": "\\b(?:{TARGET_TOOL})\\s+(?:[eè]\\s+rotto|fa\\s+schifo)",
+      "category": "tooling_rage",
+      "severity": 2
+    }
+  ]
+}

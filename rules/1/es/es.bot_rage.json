@@ -1,0 +1,11 @@
+{
+  "language": "es",
+  "templates": [
+    {
+      "id": "es.bot_rage.basura",
+      "pattern": "\\b(?:{TARGET_BOT})\\s+es\\s+(?:basura|una\\s+mierda|porquer[ií]a)",
+      "category": "bot_rage",
+      "severity": 2
+    }
+  ]
+}

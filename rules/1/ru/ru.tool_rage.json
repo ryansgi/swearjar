@@ -1,0 +1,11 @@
+{
+  "language": "ru",
+  "templates": [
+    {
+      "id": "ru.tool_rage.core",
+      "pattern": "\\b(?:{TARGET_TOOL})\\s+(?:дерьмо|мусор|сломан[оа]?|сломался)",
+      "category": "tooling_rage",
+      "severity": 2
+    }
+  ]
+}

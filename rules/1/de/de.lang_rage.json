@@ -1,0 +1,11 @@
+{
+  "language": "de",
+  "templates": [
+    {
+      "id": "de.lang_rage.core",
+      "pattern": "\\b(?:{TARGET_LANG})\\s+ist\\s+(?:m[üu]ll|schrott|schei(?:sse|ße)|schlecht)",
+      "category": "lang_rage",
+      "severity": 2
+    }
+  ]
+}

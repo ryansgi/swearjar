@@ -1,0 +1,25 @@
+{
+  "language": "ru",
+  "lemmas": [
+    {
+      "term": "дерьмо",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "фигня",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "мусор",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "сломано",
+      "category": "tooling_rage",
+      "severity": 1
+    }
+  ]
+}

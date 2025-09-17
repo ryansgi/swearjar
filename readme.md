@@ -29,7 +29,7 @@ Backfill resume)
 
 Nightshift implementation)
 
-- docker exec -it sw_api bash -c 'GOEXPERIMENT=jsonv2 go run ./cmd/swearjar-backfill -start 2025-08-01T00 -end 2025-08-01T00 --detect --detver 1 --nightshift --ns-detver 1 --ns-retention aggressive --ns-workers 2 --ns-leases'
+- docker exec -it sw_api bash -c 'GOEXPERIMENT=jsonv2 go run ./cmd/swearjar-backfill -start 2011-02-12T00 -end 2025-08-01T00 --detect --detver 1 --nightshift --ns-detver 1 --ns-retention aggressive --ns-workers 2 --ns-leases'
 
 # Starting to validate the concept... Win
 
@@ -59,4 +59,12 @@ FROM system.parts
 WHERE active AND database = 'swearjar'
 GROUP BY database, table
 ORDER BY sum(bytes) DESC;
+```
+
+# Rules
+
+(I have been working on this way too long)
+
+```
+docker exec -it sw_api bash -c 'GOEXPERIMENT=jsonv2 go run ./cmd/swearjar-rulepacker'
 ```

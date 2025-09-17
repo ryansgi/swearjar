@@ -1,0 +1,11 @@
+{
+  "language": "it",
+  "templates": [
+    {
+      "id": "it.generic.core",
+      "pattern": "\\bwtf\\b",
+      "category": "generic",
+      "severity": 1
+    }
+  ]
+}

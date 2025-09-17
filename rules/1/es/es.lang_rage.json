@@ -1,0 +1,11 @@
+{
+  "language": "es",
+  "templates": [
+    {
+      "id": "es.lang_rage.core",
+      "pattern": "\\b(?:{TARGET_LANG})\\s+es\\s+(?:una\\s+mierda|basura|horrible|p[eé]simo)",
+      "category": "lang_rage",
+      "severity": 2
+    }
+  ]
+}

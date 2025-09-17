@@ -1,0 +1,30 @@
+{
+  "language": "de",
+  "lemmas": [
+    {
+      "term": "scheisse",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "scheiße",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "mist",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "schrott",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "kaputt",
+      "category": "tooling_rage",
+      "severity": 1
+    }
+  ]
+}

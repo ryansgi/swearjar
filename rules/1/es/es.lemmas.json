@@ -1,0 +1,30 @@
+{
+  "language": "es",
+  "lemmas": [
+    {
+      "term": "mierda",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "joder",
+      "category": "generic",
+      "severity": 2
+    },
+    {
+      "term": "basura",
+      "category": "generic",
+      "severity": 1
+    },
+    {
+      "term": "roto",
+      "category": "tooling_rage",
+      "severity": 1
+    },
+    {
+      "term": "apesta",
+      "category": "generic",
+      "severity": 1
+    }
+  ]
+}

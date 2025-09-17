@@ -1,0 +1,11 @@
+{
+  "language": "ja",
+  "templates": [
+    {
+      "id": "ja.lang_rage.core",
+      "pattern": "(?:{TARGET_LANG}).*?(?:ゴミ|最悪|クソ|だめ)",
+      "category": "lang_rage",
+      "severity": 2
+    }
+  ]
+}

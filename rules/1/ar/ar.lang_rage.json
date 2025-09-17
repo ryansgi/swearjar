@@ -1,0 +1,11 @@
+{
+  "language": "ar",
+  "templates": [
+    {
+      "id": "ar.lang_rage.core",
+      "pattern": "(?:{TARGET_LANG})\\s+(?:سيء|قمامة|فظيع)",
+      "category": "lang_rage",
+      "severity": 2
+    }
+  ]
+}

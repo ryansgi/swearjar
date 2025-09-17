@@ -1,0 +1,11 @@
+{
+  "language": "ja",
+  "templates": [
+    {
+      "id": "ja.tool_rage.core",
+      "pattern": "(?:{TARGET_TOOL}).*?(?:壊れてる|ゴミ|使えない)",
+      "category": "tooling_rage",
+      "severity": 2
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "language": "pt",
+  "templates": [
+    {
+      "id": "pt.lang_rage.core",
+      "pattern": "\\b(?:{TARGET_LANG})\\s+é\\s+(?:lixo|uma\\s+merda|p[eé]ssimo)",
+      "category": "lang_rage",
+      "severity": 2
+    }
+  ]
+}

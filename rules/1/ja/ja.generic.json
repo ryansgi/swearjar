@@ -1,0 +1,11 @@
+{
+  "language": "ja",
+  "templates": [
+    {
+      "id": "ja.generic.core",
+      "pattern": "(何これ|なんだこれ)",
+      "category": "generic",
+      "severity": 1
+    }
+  ]
+}

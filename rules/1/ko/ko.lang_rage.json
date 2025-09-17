@@ -1,0 +1,11 @@
+{
+  "language": "ko",
+  "templates": [
+    {
+      "id": "ko.lang_rage.core",
+      "pattern": "(?:{TARGET_LANG}).*?(?:쓰레기|최악|엉망)",
+      "category": "lang_rage",
+      "severity": 2
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "language": "nl",
+  "templates": [
+    {
+      "id": "nl.bot_rage.core",
+      "pattern": "\\b(?:{TARGET_BOT})\\s+is\\s+(?:rotzooi|troep|bagger|kapot)",
+      "category": "bot_rage",
+      "severity": 2
+    }
+  ]
+}

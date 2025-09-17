@@ -1,0 +1,11 @@
+{
+  "language": "ja",
+  "templates": [
+    {
+      "id": "ja.bot_rage.core",
+      "pattern": "(?:{TARGET_BOT}).*?(?:ゴミ|クソ|使えない)",
+      "category": "bot_rage",
+      "severity": 2
+    }
+  ]
+}

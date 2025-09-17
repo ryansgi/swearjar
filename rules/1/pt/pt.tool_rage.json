@@ -1,0 +1,11 @@
+{
+  "language": "pt",
+  "templates": [
+    {
+      "id": "pt.tool_rage.core",
+      "pattern": "\\b(?:{TARGET_TOOL})\\s+est[aá]\\s+quebrado",
+      "category": "tooling_rage",
+      "severity": 2
+    }
+  ]
+}

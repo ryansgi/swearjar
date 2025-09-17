@@ -1,0 +1,11 @@
+{
+  "language": "fr",
+  "templates": [
+    {
+      "id": "fr.tool_rage.core",
+      "pattern": "\\b(?:{TARGET_TOOL})\\s+est\\s+(?:pourri|nul|cass[ée])",
+      "category": "tooling_rage",
+      "severity": 2
+    }
+  ]
+}
