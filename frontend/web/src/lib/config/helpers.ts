@@ -29,7 +29,11 @@ export function readRawEnv(key: string): string | undefined {
 }
 
 // Public allowlist: only these CORE_FRONTEND_* keys are safe to ship to the client
-export const PUBLIC_ALLOWLIST: Set<string> = new Set(["CORE_FRONTEND_API_URL"])
+export const PUBLIC_ALLOWLIST: Set<string> = new Set([
+  "CORE_FRONTEND_API_URL",
+  "CORE_FRONTEND_EXPLORE_MIN_DATE",
+  "CORE_FRONTEND_EXPLORE_DEFAULT_YEAR",
+])
 
 // Collect all CORE_FRONTEND_* vars from known sources
 function collectAllCoreEnv(): Record<string, string> {

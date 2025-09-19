@@ -3,10 +3,6 @@ import { env, publicEnv } from "./helpers"
 import * as Must from "./must"
 import * as May from "./may"
 
-export type AppConfig = {
-  apiUrl: string
-}
-
 export class Conf {
   private readonly prefixStr: string
   constructor(prefix = "") {
@@ -75,9 +71,17 @@ export class Conf {
 // A ready-to-use, namespaced config rooted at CORE_FRONTEND_
 export const CORE = new Conf("CORE_FRONTEND_")
 
+export type AppConfig = {
+  apiUrl: string
+  exploreMinDate: string
+  exploreDefaultYear: string
+}
+
 // App-level config (browser-safe values must be allowlisted via publicEnv)
 export const config: Readonly<AppConfig> = Object.freeze({
   apiUrl: CORE.MayString("API_URL", "http://sw_api:4000"),
+  exploreMinDate: CORE.MayString("EXPLORE_MIN_DATE", "2011-02-12T00:00:00Z"),
+  exploreDefaultYear: CORE.MayString("EXPLORE_DEFAULT_YEAR", "2014"),
 })
 
 // Re-export browser-ship-safe env map

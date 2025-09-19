@@ -6,6 +6,7 @@ import type {
   HeatmapWeeklyRespDTO,
   LangBarsRespDTO,
   GlobalOptionsDTO,
+  KPIStripRespDTO,
 } from "./dto"
 import type {
   TimeseriesHitsResp,
@@ -13,6 +14,7 @@ import type {
   HeatmapWeeklyResp,
   LangBarsResp,
   GlobalOptions,
+  KPIStripResp,
 } from "./models"
 
 export const TimeseriesPointDTOZ = z.object({
@@ -101,5 +103,31 @@ export function toGlobalOptionsDTO(m: GlobalOptions): GlobalOptionsDTO {
     nl_langs: m.nlLangs,
     code_langs: m.codeLangs,
     page: m.page,
+  }
+}
+
+export const KPIStripRespDTOZ = z.object({
+  day: z.string(),
+  hits: z.number(),
+  offending_utterances: z.number(),
+  repos: z.number(),
+  actors: z.number(),
+  all_utterances: z.number().optional(),
+  intensity: z.number().optional(),
+  coverage: z.number().optional(),
+  rarity: z.number().optional(),
+})
+
+export function intoKPIStripResp(d: KPIStripRespDTO): KPIStripResp {
+  return {
+    day: d.day,
+    hits: d.hits,
+    offendingUtterances: d.offending_utterances,
+    repos: d.repos,
+    actors: d.actors,
+    allUtterances: d.all_utterances,
+    intensity: d.intensity,
+    coverage: d.coverage,
+    rarity: d.rarity,
   }
 }

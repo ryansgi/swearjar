@@ -1,6 +1,6 @@
 import Hero from "@/components/Hero.server"
-import ExploreCalendar from "@/components/explore/ExploreCalendar.client"
-import BirdsEye from "@/components/explore/BirdsEye.client"
+import ExploreCalendar from "@/components/home/ExploreCalendar.client"
+import BirdsEye from "@/components/home/BirdsEye.client"
 
 export default async function Dashboard() {
   // In the future, fetch real stats on the server here

@@ -69,3 +69,17 @@ export type LangBarsRespDTO = {
   items: LangBarItemDTO[]
   total_hits: number
 }
+
+export type KPIStripInputDTO = GlobalOptionsDTO
+
+export type KPIStripRespDTO = {
+  day: string
+  hits: number
+  offending_utterances: number
+  repos: number
+  actors: number
+  all_utterances?: number
+  intensity?: number // hits / offending_utterances
+  coverage?: number // offending_utterances / all_utterances
+  rarity?: number // hits / all_utterances
+}

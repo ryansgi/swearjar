@@ -53,3 +53,17 @@ export type LangBarItem = {
   ratio?: number
 }
 export type LangBarsResp = { items: LangBarItem[]; totalHits: number }
+
+export type KPIStripInput = GlobalOptions
+
+export type KPIStripResp = {
+  day: string
+  hits: number
+  offendingUtterances: number
+  repos: number
+  actors: number
+  allUtterances?: number
+  intensity?: number // hits / offending_utterances
+  coverage?: number // offending_utterances / all_utterances
+  rarity?: number // hits / all_utterances
+}

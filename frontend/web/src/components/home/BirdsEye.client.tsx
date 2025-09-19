@@ -1,8 +1,8 @@
 "use client"
 
 import * as React from "react"
-import ExploreCalendar from "@/components/explore/ExploreCalendar.client"
-import TimeseriesPanel from "@/components/explore/ExplorePanel.client"
+import ExploreCalendar from "@/components/home/ExploreCalendar.client"
+import TimeseriesPanel from "@/components/home/ExplorePanel.client"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import type { Variant } from "@/lib/chartScales"

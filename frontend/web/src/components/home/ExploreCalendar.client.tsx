@@ -37,13 +37,10 @@ export type ExploreCalendarProps = {
   initialYear?: number
   initialVariant?: Variant
   scale?: { steps?: number; min?: number; max?: number; reverse?: boolean }
-  /** Real data from the API (camelCase domain model) */
   points?: TimeseriesPoint[]
 }
 
-/** Map variant -> which field to visualize in the calendar */
 function valueForVariant(p: TimeseriesPoint, variant: Variant): number {
-  // 'commit-crimes' = total hits; 'utterances' = all events/utterances
   return variant === "utterances" ? (p.allUtterances ?? 0) : (p.hits ?? 0)
 }
 
@@ -117,7 +114,6 @@ export default function ExploreCalendar({
   // responsive layout
   const isMobile = useMedia("(max-width: 640px)")
 
-  // Legends MUST be typed so anchor/direction don't widen to string
   const legends: CalendarLegendProps[] = isMobile
     ? []
     : [
