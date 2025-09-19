@@ -44,3 +44,4 @@ backend/internal/services/api/docs
 # Frontend
 /frontend/web/node_modules/*
 /frontend/web/.next
+/backend/.air
