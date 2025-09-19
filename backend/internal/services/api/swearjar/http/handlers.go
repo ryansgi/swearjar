@@ -51,6 +51,8 @@ func Register(r httpkit.Router, s *svc.Service) {
 	httpkit.PostJSON[domain.TimeseriesHourlyInput](r, "/timeseries/hits-hourly", h.timeseriesHourly) // 20
 	httpkit.PostJSON[domain.ActorOverviewInput](r, "/actors/overview", h.actorOverview)              // 21
 	httpkit.PostJSON[domain.RepoActorCrosstabInput](r, "/crosstab/repo-actor", h.repoActorCrosstab)  // 22
+
+	httpkit.PostJSON[domain.KPIStripInput](r, "/kpi", h.kpiStrip) // 23
 }
 
 type handlers struct{ svc *svc.Service }
@@ -305,4 +307,16 @@ func (h *handlers) actorOverview(r *stdhttp.Request, in domain.ActorOverviewInpu
 // @Router /swearjar/crosstab/repo-actor [post]
 func (h *handlers) repoActorCrosstab(r *stdhttp.Request, in domain.RepoActorCrosstabInput) (any, error) {
 	return h.svc.RepoActorCrosstab(r.Context(), in)
+}
+
+// swagger:route POST /swearjar/kpi Swearjar swearjarKPIStrip
+// @Summary KPI strip (headlines for the window; use today for homepage)
+// @Tags Swearjar
+// @Accept json
+// @Produce json
+// @Param payload body domain.KPIStripInput true "Query"
+// @Success 200 {object} domain.KPIStripResp "ok"
+// @Router /swearjar/kpi [post]
+func (h *handlers) kpiStrip(r *stdhttp.Request, in domain.KPIStripInput) (any, error) {
+	return h.svc.KPIStrip(r.Context(), in)
 }

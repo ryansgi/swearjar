@@ -253,3 +253,17 @@ func (s *Service) RepoActorCrosstab(
 ) (domain.RepoActorCrosstabResp, error) {
 	return domain.RepoActorCrosstabResp{Cells: []domain.RepoActorCell{}}, nil
 }
+
+// KPIStrip returns headline KPIs (for the window; pass today for homepage)
+func (s *Service) KPIStrip(
+	ctx context.Context,
+	in domain.KPIStripInput,
+) (domain.KPIStripResp, error) {
+	var out domain.KPIStripResp
+	err := s.DB.Tx(ctx, func(q repokit.Queryer) error {
+		var e error
+		out, e = s.Repo.Bind(q).KPIStrip(ctx, in)
+		return e
+	})
+	return out, err
+}

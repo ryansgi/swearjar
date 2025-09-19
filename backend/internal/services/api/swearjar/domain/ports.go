@@ -1,6 +1,8 @@
 package domain
 
-import "context"
+import (
+	"context"
+)
 
 // ServicePort defines the swearjar service interface
 type ServicePort interface {
@@ -27,4 +29,6 @@ type ServicePort interface {
 	TimeseriesHourly(ctx context.Context, in TimeseriesHourlyInput) (TimeseriesHourlyResp, error)
 	ActorOverview(ctx context.Context, in ActorOverviewInput) (ActorOverviewResp, error)
 	RepoActorCrosstab(ctx context.Context, in RepoActorCrosstabInput) (RepoActorCrosstabResp, error)
+
+	KPIStrip(ctx context.Context, in KPIStripInput) (KPIStripResp, error)
 }

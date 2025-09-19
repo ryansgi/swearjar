@@ -37,6 +37,25 @@ type GlobalOptions struct {
 	Page PageOpts `json:"page,omitempty"`
 }
 
+// KPIStripInput carries shared options for the KPI strip
+type KPIStripInput struct {
+	GlobalOptions
+}
+
+// KPIStripResp returns totals for the window
+type KPIStripResp struct {
+	// Echo back the window start (YYYY-MM-DD) for labeling on UI
+	Day                 string  `json:"day"                    example:"2025-09-18"`
+	Hits                int64   `json:"hits"                   example:"6157"`
+	OffendingUtterances int64   `json:"offending_utterances"   example:"4123"`
+	Repos               int64   `json:"repos"                  example:"198"`
+	Actors              int64   `json:"actors"                 example:"743"`
+	AllUtterances       int64   `json:"all_utterances,omitempty" example:"1381384"`
+	Intensity           float64 `json:"intensity,omitempty"      example:"1.49"`   // hits / offending_utterances
+	Coverage            float64 `json:"coverage,omitempty"       example:"0.3"`    // offending_utterances / all_utter.
+	Rarity              float64 `json:"rarity,omitempty"         example:"0.0045"` // hits / all_utterances
+}
+
 // TimeseriesHitsInput carries shared options for the hits series
 type TimeseriesHitsInput struct {
 	GlobalOptions

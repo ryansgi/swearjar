@@ -31,6 +31,7 @@ type StorageRepo interface {
 	RatiosTime(ctx context.Context, in domain.RatiosTimeInput) (domain.RatiosTimeResp, error)
 	SeverityTimeseries(ctx context.Context, in domain.SeverityTimeseriesInput) (domain.SeverityTimeseriesResp, error)
 	SpikeDrivers(ctx context.Context, in domain.SpikeDriversInput) (domain.SpikeDriversResp, error)
+	KPIStrip(ctx context.Context, in domain.KPIStripInput) (domain.KPIStripResp, error)
 }
 
 // NewHybrid constructs a hybrid storage binder using PG and CH
