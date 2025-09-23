@@ -36,6 +36,19 @@
   --radius-sm: 8px;
   --radius-md: var(--radius);
   --radius-lg: 16px;
+
+  /* Semantic chart tokens */
+  --chart-hits: var(--brand-1); /* crimson -> hits (counts) */
+  --chart-offending: var(--accent-1); /* purple -> offending_utterances (counts) */
+  --chart-utterances: var(--chart-3); /* green  -> all_utterances (counts) */
+
+  --chart-intensity: var(--accent-1); /* purple -> hits/offending */
+  --chart-coverage: var(--chart-3); /* green  -> offending/all */
+  --chart-rarity: var(--accent-2); /* cyan   -> hits/all */
+
+  --severity-mild: 32 95% 60%; /* orange-ish mild */
+  --severity-strong: 0 86% 54%; /* red strong */
+  --severity-slur: 280 83% 67%; /* purple slur */
 }
 
 @theme inline {
@@ -58,6 +71,17 @@
   --color-chart-3: hsl(var(--chart-3));
   --color-chart-4: hsl(var(--chart-4));
   --color-chart-5: hsl(var(--chart-5));
+
+  --color-chart-hits: hsl(var(--chart-hits));
+  --color-chart-offending: hsl(var(--chart-offending));
+  --color-chart-utterances: hsl(var(--chart-utterances));
+  --color-chart-intensity: hsl(var(--chart-intensity));
+  --color-chart-coverage: hsl(var(--chart-coverage));
+  --color-chart-rarity: hsl(var(--chart-rarity));
+
+  --color-severity-mild: hsl(var(--severity-mild));
+  --color-severity-strong: hsl(var(--severity-strong));
+  --color-severity-slur: hsl(var(--severity-slur));
 }
 
 @custom-variant dark (&:where(.dark, .dark *));

@@ -34,6 +34,8 @@ export type ExploreUrlParamsLike = {
   repo?: string
   actor?: string
   lang?: string
+  metric?: "intensity" | "coverage" | "rarity" | "counts"
+  series?: "hits" | "offending_utterances" | "all_utterances"
 }
 
 // Derive the effective range from URL params with config-backed defaults (no URL writes here).
@@ -62,7 +64,7 @@ export function deriveRangeFromParams(p: ExploreUrlParamsLike, maxDay = todayUTC
   return { start: s, end: e }
 }
 
-// Optional period/bucket guard if you need it elsewhere.
+// Optional period/bucket guard if we need it elsewhere
 export function normalizeBucket(period: PeriodKind, bucket: "day" | "week" | "hour") {
   return (period === "year" || period === "month") && bucket === "hour" ? "day" : bucket
 }
@@ -75,20 +77,21 @@ const splitCSV = (s?: string) =>
         .filter(Boolean)
     : undefined
 
-// Build a GlobalOptions request once, in one place
 export function buildGlobalOptionsFromParams(p: ExploreUrlParamsLike): GlobalOptions {
   const range = deriveRangeFromParams(p)
   return {
     range,
     interval: "auto",
     tz: p.tz || "UTC",
-    repoHids: splitCSV(p.repo),
-    actorHids: splitCSV(p.actor),
-    nlLangs: splitCSV(p.lang),
+    metric: p.metric || "counts",
+    series: p.series || "hits",
+    normalize: p.metric && p.metric !== "counts" ? "per_utterance" : "none",
+    repo_hids: splitCSV(p.repo),
+    actor_hids: splitCSV(p.actor),
+    nl_langs: splitCSV(p.lang),
   }
 }
 
-// Expose these if UI pieces (like DateField) want to clamp/dropdowns consistently
 export const ExploreDateBounds = {
   MIN_DAY,
   MAX_DAY_UTC: todayUTC, // call to get "today" each time

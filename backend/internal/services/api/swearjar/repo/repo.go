@@ -32,6 +32,7 @@ type StorageRepo interface {
 	SeverityTimeseries(ctx context.Context, in domain.SeverityTimeseriesInput) (domain.SeverityTimeseriesResp, error)
 	SpikeDrivers(ctx context.Context, in domain.SpikeDriversInput) (domain.SpikeDriversResp, error)
 	KPIStrip(ctx context.Context, in domain.KPIStripInput) (domain.KPIStripResp, error)
+	YearlyTrends(ctx context.Context, in domain.YearlyTrendsInput) (domain.YearlyTrendsResp, error)
 }
 
 // NewHybrid constructs a hybrid storage binder using PG and CH
@@ -219,19 +220,6 @@ func (s *hybridStore) TimeseriesHits(
 }
 
 // HeatmapWeekly is unimplemented
-func (s *hybridStore) HeatmapWeekly(
-	ctx context.Context,
-	in domain.HeatmapWeeklyInput,
-) (domain.HeatmapWeeklyResp, error) {
-	return unimpl[domain.HeatmapWeeklyResp]()
-}
-
-// HeatmapWeekly is unimplemented
-func (s *hybridStore) LangBars(ctx context.Context, in domain.LangBarsInput) (domain.LangBarsResp, error) {
-	return unimpl[domain.LangBarsResp]()
-}
-
-// HeatmapWeekly is unimplemented
 func (s *hybridStore) TimeseriesByDetver(
 	ctx context.Context,
 	in domain.TimeseriesDetverInput,
@@ -242,14 +230,6 @@ func (s *hybridStore) TimeseriesByDetver(
 // CodeLangBars is unimplemented
 func (s *hybridStore) CodeLangBars(ctx context.Context, in domain.CodeLangBarsInput) (domain.CodeLangBarsResp, error) {
 	return unimpl[domain.CodeLangBarsResp]()
-}
-
-// CategoriesStack is unimplemented
-func (s *hybridStore) CategoriesStack(
-	ctx context.Context,
-	in domain.CategoriesStackInput,
-) (domain.CategoriesStackResp, error) {
-	return unimpl[domain.CategoriesStackResp]()
 }
 
 // TopTerms is unimplemented

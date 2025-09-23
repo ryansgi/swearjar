@@ -33,6 +33,9 @@ type GlobalOptions struct {
 	NLLangs   []string `json:"nl_langs,omitempty"   validate:"omitempty,dive" example:"en"`
 	CodeLangs []string `json:"code_langs,omitempty" validate:"omitempty,dive,printascii" example:"JavaScript"`
 
+	Metric string `json:"metric,omitempty" validate:"omitempty,oneof=intensity coverage rarity counts" example:"counts"`
+	Series string `json:"series,omitempty" validate:"omitempty,oneof=hits offending_utterances all_utterances" example:"hits"` //nolint:lll
+
 	// Pagination options used by ranked endpoints
 	Page PageOpts `json:"page,omitempty"`
 }
@@ -91,13 +94,14 @@ type HeatmapWeeklyInput struct {
 	GlobalOptions
 }
 
-// HeatmapCell defines a cell in the weekly heatmap
+// HeatmapCell is a single cell in the weekly heatmap
 type HeatmapCell struct {
-	DOW        int     `json:"dow"        example:"1"`  // 0..6
-	Hour       int     `json:"hour"       example:"13"` // 0..23
-	Hits       int64   `json:"hits"       example:"7"`
-	Utterances int64   `json:"utterances" example:"420"`
-	Ratio      float64 `json:"ratio,omitempty" example:"0.0167"`
+	DOW                 int     `json:"dow"        example:"1"`  // 0..6
+	Hour                int     `json:"hour"       example:"13"` // 0..23
+	Hits                int64   `json:"hits"       example:"7"`
+	OffendingUtterances int64   `json:"offending_utterances,omitempty" example:"3"`
+	Utterances          int64   `json:"utterances" example:"420"`
+	Ratio               float64 `json:"ratio,omitempty" example:"0.0167"`
 }
 
 // HeatmapWeeklyResp is the response for the weekly heatmap
@@ -163,19 +167,46 @@ type CodeLangBarsResp struct {
 }
 
 // CategoriesStackInput carries options for category and severity mix
-type CategoriesStackInput struct{ GlobalOptions }
+type CategoriesStackInput struct {
+	GlobalOptions
+
+	TopN   int    `json:"top_n,omitempty"           validate:"omitempty,min=1,max=50" example:"8"`
+	SortBy string `json:"sort_by,omitempty"         validate:"omitempty,oneof=hits share mild strong slur_masked" example:"hits"` //nolint:lll
+	// collapse the remainder into "other"
+	IncludeOther *bool `json:"include_other,omitempty"   example:"true"`
+	// return shares (0..1) alongside counts
+	AsShare    *bool    `json:"as_share,omitempty"        example:"false"`
+	Severities []string `json:"severities,omitempty"      validate:"omitempty,dive,oneof=mild strong slur_masked"`
+	Categories []string `json:"categories,omitempty"      validate:"omitempty,dive,printascii"`
+}
 
 // CategoryStackItem is a stacked counts row for a category
 type CategoryStackItem struct {
-	Label      string `json:"label"        example:"bot_rage"`
-	Mild       int64  `json:"mild"         example:"1200"`
-	Strong     int64  `json:"strong"       example:"300"`
-	SlurMasked int64  `json:"slur_masked"  example:"25"`
-	Total      int64  `json:"total"        example:"1525"`
+	Key    string             `json:"key"           example:"bot_rage"`
+	Label  string             `json:"label"         example:"bot_rage"`
+	Counts map[string]int64   `json:"counts,omitempty"` // e.g. {"mild":1200,"strong":300,"slur_masked":25}
+	Shares map[string]float64 `json:"shares,omitempty"` // same keys, 0..1; present iff AsShare=true
+
+	// Existing explicit fields (unchanged; remain for convenience)
+	Mild       int64 `json:"mild"         example:"1200"`
+	Strong     int64 `json:"strong"       example:"300"`
+	SlurMasked int64 `json:"slur_masked"  example:"25"`
+	Total      int64 `json:"total"        example:"1525"`
 }
 
 // CategoriesStackResp is the response for category and severity mix
 type CategoriesStackResp struct {
+	// order for stacking
+	SeverityKeys []string `json:"severity_keys" example:"[\"mild\",\"strong\",\"slur_masked\"]"`
+	// sum per severity across all categories
+	TotalsBySev map[string]int64 `json:"totals_by_sev,omitempty"`
+	// 0..1, iff AsShare=true
+	TotalsShareSev map[string]float64 `json:"totals_share_sev,omitempty"`
+	// actual sort key used
+	SortedBy string `json:"sorted_by,omitempty" example:"hits"`
+	// echo for labeling
+	Window TimeRange `json:"window"`
+
 	Stack     []CategoryStackItem `json:"stack"`
 	TotalHits int64               `json:"total_hits" example:"20000"`
 }
@@ -502,4 +533,72 @@ type RepoActorCell struct {
 // RepoActorCrosstabResp is the response for the cross tab
 type RepoActorCrosstabResp struct {
 	Cells []RepoActorCell `json:"cells"`
+}
+
+// YearlyTrendsInput reuses GlobalOptions for scope filters (repo/actor/lang/etc) and TZ
+// Ignores GlobalOptions.Range and GlobalOptions.Interval (server enforces monthly, full-year buckets)
+// If YearRange is empty, server uses [data_min_year .. data_max_year] with a hard cap (e.g., 20y)
+type YearlyTrendsInput struct {
+	GlobalOptions
+
+	// Optional explicit year bounds; if omitted, server fills with data min/max
+	YearRange *struct {
+		Min int `json:"min" validate:"omitempty,min=1970,max=2100" example:"2011"`
+		Max int `json:"max" validate:"omitempty,min=1970,max=2100" example:"2014"`
+	} `json:"year_range,omitempty"`
+
+	// Optional toggles to trim payload. Default: all true
+	Include []string `json:"include,omitempty" validate:"omitempty,dive,oneof=hits rate severity mix detver_markers seasonality"` //nolint:lll
+}
+
+// MonthBand provides the seasonality ribbon (per metric, 12 items for Jan..Dec)
+type MonthBand struct {
+	M      int     `json:"m"      example:"1"` // 1..12
+	Median float64 `json:"median" example:"812"`
+	P25    float64 `json:"p25"    example:"700"`
+	P75    float64 `json:"p75"    example:"940"`
+}
+
+// CategoryShare is used by the mix snapshot
+type CategoryShare struct {
+	Key   string  `json:"key"   example:"bot_rage"`
+	Hits  int64   `json:"hits"  example:"1525"`
+	Share float64 `json:"share" example:"0.41"` // 0..1
+}
+
+// DetverMarker marks a detector version change on the timeline
+type DetverMarker struct {
+	Date    string `json:"date"    example:"2012-05-17"` // YYYY-MM-DD
+	Version int    `json:"version" example:"1"`
+}
+
+// YearlyTrendsResp is one payload to render the entire panel
+type YearlyTrendsResp struct {
+	Years []int `json:"years"`
+
+	// Monthly series: year -> 12 values (Jan..Dec). Always length 12 if year is complete;
+	// trailing months can be zero or omitted by convention; choose and document one
+	Monthly struct {
+		Hits     map[int][]int64   `json:"hits,omitempty"`     // [12]
+		Rate     map[int][]float64 `json:"rate,omitempty"`     // hits / all_utterances
+		Severity map[int][]float64 `json:"severity,omitempty"` // mean severity index (see note)
+	} `json:"monthly"`
+
+	// Seasonality bands per metric (12 points each)
+	Seasonality map[string][]MonthBand `json:"seasonality,omitempty"` // keys: hits|rate|severity
+
+	// Mix snapshot: this year vs last year (category severity mix collapsed to category shares)
+	Mix *struct {
+		ThisYear []CategoryShare `json:"this_year"`
+		LastYear []CategoryShare `json:"last_year"`
+	} `json:"mix,omitempty"`
+
+	DetverMarkers []DetverMarker `json:"detver_markers,omitempty"`
+
+	Meta struct {
+		DataMinYear int    `json:"data_min_year" example:"2011"`
+		DataMaxYear int    `json:"data_max_year" example:"2014"`
+		Interval    string `json:"interval"      example:"month"` // always "month"
+		GeneratedAt string `json:"generated_at"  example:"2025-09-19T10:00:00Z"`
+	} `json:"meta"`
 }

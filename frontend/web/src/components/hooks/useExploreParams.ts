@@ -16,7 +16,6 @@ export type Period = "year" | "month" | "day" | "custom"
 export type Bucket = "day" | "week" | "hour"
 export type Metric = "counts" | "intensity" | "coverage" | "rarity"
 export type Series = "hits" | "offending_utterances" | "all_utterances"
-export type EventKind = "commit" | "events"
 
 const TAB_OPTS = [
   "overview",
@@ -41,7 +40,6 @@ const SERIES_OPTS = [
   "offending_utterances",
   "all_utterances",
 ] as const satisfies readonly Series[]
-const EVENT_OPTS = ["commit", "events"] as const satisfies readonly EventKind[]
 
 const readMulti = (q: URLSearchParams, key: string) => {
   const multi = q.getAll(key).filter(Boolean)
@@ -89,7 +87,6 @@ export function useExploreParams() {
       bucket,
       metric,
       series,
-      event: pickOrDefault<EventKind>(q.get("event"), EVENT_OPTS, "commit"),
       tz: q.get("tz") ?? "UTC",
       repo: q.get("repo") ?? "",
       actor: q.get("actor") ?? "",
@@ -99,7 +96,7 @@ export function useExploreParams() {
       bType: q.get("bType") ?? "",
       bId: q.get("bId") ?? "",
     }
-  }, [q])
+  }, [q.toString()])
 
   const isDefault = useMemo(() => {
     return (
@@ -107,7 +104,6 @@ export function useExploreParams() {
       params.bucket === "day" &&
       params.metric === "counts" &&
       params.series === "hits" &&
-      params.event === "commit" &&
       params.tz === "UTC" &&
       !params.date &&
       !params.start &&
@@ -158,9 +154,6 @@ export function useExploreParams() {
       setMetric: (v: Metric) => push({ metric: pickOrDefault<Metric>(v, METRIC_OPTS, "counts") }),
 
       setSeries: (v: Series) => push({ series: pickOrDefault<Series>(v, SERIES_OPTS, "hits") }),
-
-      setEvent: (v: EventKind) =>
-        push({ event: pickOrDefault<EventKind>(v, EVENT_OPTS, "commit") }),
 
       setTz: (v: string) => push({ tz: v }),
 

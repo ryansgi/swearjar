@@ -1,4 +1,3 @@
-// src/components/explore/OverviewPanel.tsx
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
@@ -7,21 +6,24 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useExploreParams } from "@/components/hooks/useExploreParams"
 import { buildGlobalOptionsFromParams } from "@/lib/explore/derive"
 import { api } from "@/lib/api/client"
-import { toGlobalOptionsDTO, KPIStripRespDTOZ, intoKPIStripResp } from "@/lib/domain/codecs"
+import { KPIStripRespDTOZ, intoKPIStripResp } from "@/lib/domain/codecs"
 import type { KPIStripResp } from "@/lib/domain/models"
 import { Flame, GitBranch, Users, PiggyBank } from "lucide-react"
+import ActivityClock from "./ActivityClock"
+import { useGlobalOptions } from "@/components/hooks/useGlobalOptions"
+
+import dynamic from "next/dynamic"
+const YearlyTrends = dynamic(() => import("./YearlyTrends"), { ssr: false })
+
+import CategoryStack from "./CategoryStacks"
+import LanguageBars from "./LanguageBars"
 
 const fmtInt = new Intl.NumberFormat()
 const fmt1 = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 })
 const fmt2p = new Intl.NumberFormat(undefined, { style: "percent", maximumFractionDigits: 2 })
 
 async function fetchKPIStrip(opts: ReturnType<typeof buildGlobalOptionsFromParams>) {
-  return api.decode.post(
-    "/swearjar/kpi",
-    { ...toGlobalOptionsDTO(opts) },
-    KPIStripRespDTOZ,
-    intoKPIStripResp,
-  )
+  return api.decode.post("/swearjar/kpi", opts, KPIStripRespDTOZ, intoKPIStripResp)
 }
 
 function KPI({
@@ -95,55 +97,10 @@ function KPI({
   )
 }
 
-function MetaChip({
-  dot,
-  label,
-  value,
-  title,
-}: {
-  dot: string // bg-emerald-500, bg-violet-500, etc
-  label: string
-  value: string
-  title?: string
-}) {
-  return (
-    <span
-      title={title}
-      className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs md:text-sm"
-    >
-      <span className={`h-2 w-2 rounded-full ${dot}`} />
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium">{value}</span>
-    </span>
-  )
-}
-
 export function OverviewPanel() {
   const params = useExploreParams()
 
-  const request = useMemo(
-    () =>
-      buildGlobalOptionsFromParams({
-        period: params.period,
-        date: params.date,
-        start: params.start,
-        end: params.end,
-        tz: params.tz,
-        repo: params.repo,
-        actor: params.actor,
-        lang: params.lang,
-      }),
-    [
-      params.period,
-      params.date,
-      params.start,
-      params.end,
-      params.tz,
-      params.repo,
-      params.actor,
-      params.lang,
-    ],
-  )
+  const request = useGlobalOptions()
 
   const [data, setData] = useState<KPIStripResp | null>(null)
   const [loading, setLoading] = useState(true)
@@ -190,14 +147,14 @@ export function OverviewPanel() {
           <>
             <KPI
               title="Swearjar"
-              value={data ? fmtUSD.format((data.offendingUtterances ?? 0) * 0.25) : undefined}
+              value={data ? fmtUSD.format((data.offending_utterances ?? 0) * 0.25) : undefined}
               icon={PiggyBank}
               accent="from-emerald-500/50 via-teal-500/30 to-emerald-600/40"
               ribbons={[
                 {
                   label: "All Events",
                   value:
-                    data?.allUtterances !== undefined ? fmtInt.format(data.allUtterances) : "—",
+                    data?.all_utterances !== undefined ? fmtInt.format(data.all_utterances) : "—",
                   color: "amber",
                 },
               ]}
@@ -248,7 +205,7 @@ export function OverviewPanel() {
           </>
         )}
       </div>{" "}
-      {/* Calendar heatmap */}
+      {/* Calendar heatmap
       <Card className="col-span-12">
         <CardHeader>
           <CardTitle className="text-base">Calendar Heatmap</CardTitle>
@@ -256,14 +213,14 @@ export function OverviewPanel() {
         <CardContent>
           <Skeleton className="h-40 w-full" />
         </CardContent>
-      </Card>
+      </Card> */}
       {/* Activity clock and trend line */}
       <Card className="col-span-12 lg:col-span-6">
         <CardHeader>
           <CardTitle className="text-base">Activity Clock</CardTitle>
         </CardHeader>
         <CardContent>
-          <Skeleton className="h-64 w-full" />
+          <ActivityClock />
         </CardContent>
       </Card>
       <Card className="col-span-12 lg:col-span-6">
@@ -271,26 +228,12 @@ export function OverviewPanel() {
           <CardTitle className="text-base">Yearly Trend</CardTitle>
         </CardHeader>
         <CardContent>
-          <Skeleton className="h-64 w-full" />
+          <YearlyTrends />
         </CardContent>
       </Card>
       {/* Category stack & language bars */}
-      <Card className="col-span-12 lg:col-span-7">
-        <CardHeader>
-          <CardTitle className="text-base">Category Stack</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Skeleton className="h-64 w-full" />
-        </CardContent>
-      </Card>
-      <Card className="col-span-12 lg:col-span-5">
-        <CardHeader>
-          <CardTitle className="text-base">Language Bars</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Skeleton className="h-64 w-full" />
-        </CardContent>
-      </Card>
+      <CategoryStack />
+      <LanguageBars />
     </div>
   )
 }

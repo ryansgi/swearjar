@@ -31,4 +31,5 @@ type ServicePort interface {
 	RepoActorCrosstab(ctx context.Context, in RepoActorCrosstabInput) (RepoActorCrosstabResp, error)
 
 	KPIStrip(ctx context.Context, in KPIStripInput) (KPIStripResp, error)
+	YearlyTrends(ctx context.Context, in YearlyTrendsInput) (YearlyTrendsResp, error)
 }

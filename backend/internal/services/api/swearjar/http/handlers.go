@@ -52,7 +52,8 @@ func Register(r httpkit.Router, s *svc.Service) {
 	httpkit.PostJSON[domain.ActorOverviewInput](r, "/actors/overview", h.actorOverview)              // 21
 	httpkit.PostJSON[domain.RepoActorCrosstabInput](r, "/crosstab/repo-actor", h.repoActorCrosstab)  // 22
 
-	httpkit.PostJSON[domain.KPIStripInput](r, "/kpi", h.kpiStrip) // 23
+	httpkit.PostJSON[domain.KPIStripInput](r, "/kpi", h.kpiStrip)                   // 23
+	httpkit.PostJSON[domain.YearlyTrendsInput](r, "/yearly/trends", h.yearlyTrends) // 24
 }
 
 type handlers struct{ svc *svc.Service }
@@ -319,4 +320,16 @@ func (h *handlers) repoActorCrosstab(r *stdhttp.Request, in domain.RepoActorCros
 // @Router /swearjar/kpi [post]
 func (h *handlers) kpiStrip(r *stdhttp.Request, in domain.KPIStripInput) (any, error) {
 	return h.svc.KPIStrip(r.Context(), in)
+}
+
+// swagger:route POST /swearjar/yearly/trends Swearjar swearjarYearlyTrends
+// @Summary Yearly trends (seasonality, yearly mix, detver markers)
+// @Tags Swearjar
+// @Accept json
+// @Produce json
+// @Param payload body domain.YearlyTrendsInput true "Query"
+// @Success 200 {object} domain.YearlyTrendsResp "ok"
+// @Router /swearjar/yearly/trends [post]
+func (h *handlers) yearlyTrends(r *stdhttp.Request, in domain.YearlyTrendsInput) (any, error) {
+	return h.svc.YearlyTrends(r.Context(), in)
 }

@@ -4,7 +4,6 @@ import { DateField } from "./DateField"
 import { BucketToggle } from "./BucketToggle"
 import { MetricToggle } from "./MetricToggle"
 import { SeriesToggle } from "./SeriesToggle"
-import { EventToggle } from "./EventToggle"
 import { TimezoneField } from "./TimezoneField"
 import { ScopeChips } from "./ScopeChips"
 import { ExportMenu } from "./ExportMenu"
@@ -25,7 +24,6 @@ export function GlobalControls() {
             <SeriesToggle />
           </div>
           <div className="flex flex-wrap items-center gap-2 md:col-span-3 md:justify-end">
-            <EventToggle />
             <TimezoneField />
           </div>
         </div>

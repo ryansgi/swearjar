@@ -87,7 +87,7 @@ func (s *Service) CodeLangBars(ctx context.Context, in domain.CodeLangBarsInput)
 	return out, err
 }
 
-// CategoriesStack is unimplemented
+// CategoriesStack returns category and severity mix
 func (s *Service) CategoriesStack(
 	ctx context.Context,
 	in domain.CategoriesStackInput,
@@ -263,6 +263,20 @@ func (s *Service) KPIStrip(
 	err := s.DB.Tx(ctx, func(q repokit.Queryer) error {
 		var e error
 		out, e = s.Repo.Bind(q).KPIStrip(ctx, in)
+		return e
+	})
+	return out, err
+}
+
+// YearlyTrends returns data for the yearly trends panel
+func (s *Service) YearlyTrends(
+	ctx context.Context,
+	in domain.YearlyTrendsInput,
+) (domain.YearlyTrendsResp, error) {
+	var out domain.YearlyTrendsResp
+	err := s.DB.Tx(ctx, func(q repokit.Queryer) error {
+		var e error
+		out, e = s.Repo.Bind(q).YearlyTrends(ctx, in)
 		return e
 	})
 	return out, err
